@@ -44,7 +44,7 @@ def source():
     return jsonify({
         "project": "unlimited-astro-open",
         "license": "AGPL-3.0-or-later",
-        "source": "https://github.com/ketanbhaktam/unlimited-astro-open",
+        "source": "https://github.com/Bhaktam-Technologies/unlimited-astro-open",
         "notice": "This service is offered under the GNU Affero General Public License v3.0. "
                   "You may obtain the Corresponding Source at the URL above."
     })

@@ -99,23 +99,7 @@ def get_ashtakavarga(**params):
 # Arudhas
 # ---------------------------------------------------------------------------
 
-def get_arudhas(**params):
-    place, dob, tob, jd, rc = _rasi_chart_objects(**params)
 
-    ba = arudhas.bhava_arudhas_from_planet_positions(rc)
-    ga = arudhas.graha_arudhas_from_planet_positions(rc)
-    ca = arudhas.chandra_arudhas_from_planet_positions(rc)
-    sa = arudhas.surya_arudhas_from_planet_positions(rc)
-
-    graha_labels = ["Sun", "Moon", "Mars", "Mercury", "Jupiter", "Venus",
-                    "Saturn", "Rahu", "Ketu", "Lagna"]
-
-    return {
-        "bhava_arudhas": {f"A{i + 1}": SIGN_NAMES[s] for i, s in enumerate(ba)},
-        "graha_arudhas": {graha_labels[i]: SIGN_NAMES[s] for i, s in enumerate(ga) if i < len(graha_labels)},
-        "chandra_arudhas": {f"C{i + 1}": SIGN_NAMES[s] for i, s in enumerate(ca)},
-        "surya_arudhas": {f"S{i + 1}": SIGN_NAMES[s] for i, s in enumerate(sa)},
-    }
 
 
 # ---------------------------------------------------------------------------
@@ -128,14 +112,72 @@ _CHARA_KARAKA_LABELS = [
 ]
 
 
-def get_chara_karakas(**params):
+
+def get_karakamsa(**params):
+    """Jaimini Karakamsa + Swamsa analysis.
+
+    Karakamsa = sign in the D9 (Navamsa) chart where the AtmaKaraka sits.
+    Swamsa    = sign in the D9 chart where the Lagna sits.
+    Houses counted from each are the foundation of Jaimini personality/profession
+    and spirituality readings.
+    """
     place, dob, tob, jd, rc = _rasi_chart_objects(**params)
     ck = house.chara_karakas(rc)
-    out = {}
-    for i, planet_id in enumerate(ck):
-        if i < len(_CHARA_KARAKA_LABELS):
-            out[_CHARA_KARAKA_LABELS[i]] = _planet_label(planet_id)
-    return out
+    ak_planet_id = int(ck[0])
+
+    d9 = charts.navamsa_chart(rc)
+
+    # Locate each key entity in D9
+    ak_in_d9 = next((e for e in d9 if e[0] == ak_planet_id), None)
+    lagna_in_d9 = next((e for e in d9 if e[0] == "L"), None)
+    if ak_in_d9 is None or lagna_in_d9 is None:
+        raise RuntimeError("Could not locate AtmaKaraka or Lagna in D9 chart")
+
+    ak_sign = int(ak_in_d9[1][0])
+    lagna_sign = int(lagna_in_d9[1][0])
+
+    # D9 planet-to-sign map, for "planets in each house from Karakamsa"
+    d9_sign_to_planets = {i: [] for i in range(12)}
+    for entry in d9:
+        pid, (sign_idx, _deg) = entry[0], entry[1]
+        if pid == "L":
+            continue
+        d9_sign_to_planets[int(sign_idx)].append(_planet_label(pid))
+
+    def _houses_from(start_sign):
+        rows = []
+        for h in range(12):
+            s = (start_sign + h) % 12
+            rows.append({
+                "house": h + 1,
+                "sign_number": s,
+                "sign": SIGN_NAMES[s],
+                "planets": d9_sign_to_planets[s],
+            })
+        return rows
+
+    return {
+        "atma_karaka": {
+            "planet": _planet_label(ak_planet_id),
+            "planet_id": ak_planet_id,
+        },
+        "karakamsa_lagna": {
+            "description": "AtmaKaraka's sign in Navamsa (D9) — used in Jaimini "
+                           "spirituality/personality analysis.",
+            "sign_number": ak_sign,
+            "sign": SIGN_NAMES[ak_sign],
+            "degrees_in_sign": round(float(ak_in_d9[1][1]), 4),
+            "houses_from_karakamsa": _houses_from(ak_sign),
+        },
+        "swamsa_lagna": {
+            "description": "Lagna's sign in Navamsa (D9) — indicates inner self "
+                           "and profession tendencies.",
+            "sign_number": lagna_sign,
+            "sign": SIGN_NAMES[lagna_sign],
+            "degrees_in_sign": round(float(lagna_in_d9[1][1]), 4),
+            "houses_from_swamsa": _houses_from(lagna_sign),
+        },
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -151,37 +193,7 @@ _UPAGRAHA_NAMES = {
 }
 
 
-def get_upagrahas(**params):
-    place, dob, tob, jd, rc = _rasi_chart_objects(**params)
-    date_obj = drik.Date(dob[0], dob[1], dob[2])
-    out = {}
-    for planet_id, name in _UPAGRAHA_NAMES.items():
-        try:
-            r = drik.upagraha_longitude(date_obj, tob, place, planet_id)
-            if isinstance(r, (list, tuple)) and len(r) >= 2:
-                out[name] = {
-                    "sign": SIGN_NAMES[int(r[0])],
-                    "sign_number": int(r[0]),
-                    "degrees": round(float(r[1]), 4),
-                }
-        except Exception as e:
-            out[name] = {"error": str(e)}
 
-    for name, fn_name in [("Gulika (exact)", "gulika_longitude"), ("Kaala (exact)", "kaala_longitude")]:
-        fn = getattr(drik, fn_name, None)
-        if fn:
-            try:
-                r = fn(date_obj, tob, place)
-                if isinstance(r, (list, tuple)) and len(r) >= 2:
-                    out[name] = {
-                        "sign": SIGN_NAMES[int(r[0])],
-                        "sign_number": int(r[0]),
-                        "degrees": round(float(r[1]), 4),
-                    }
-            except Exception as e:
-                out[name] = {"error": str(e)}
-
-    return out
 
 
 _SPECIAL_LAGNAS = [
@@ -199,24 +211,7 @@ _SPECIAL_LAGNAS = [
 ]
 
 
-def get_special_lagnas(**params):
-    place, dob, tob, jd, rc = _rasi_chart_objects(**params)
-    out = {}
-    for label, fn_name in _SPECIAL_LAGNAS:
-        fn = getattr(drik, fn_name, None)
-        if fn is None:
-            continue
-        try:
-            r = fn(jd, place)
-            if isinstance(r, (list, tuple)) and len(r) >= 2:
-                out[label] = {
-                    "sign": SIGN_NAMES[int(r[0])],
-                    "sign_number": int(r[0]),
-                    "degrees": round(float(r[1]), 4),
-                }
-        except Exception as e:
-            out[label] = {"error": str(e)}
-    return out
+
 
 
 # ---------------------------------------------------------------------------
@@ -236,33 +231,13 @@ def _strip_html(s):
              .strip())
 
 
-def get_doshas(**params):
-    place, dob, tob, jd, rc = _rasi_chart_objects(**params)
-    dd = dosha.get_dosha_details(jd, place)
-    return {k: _strip_html(v) for k, v in dd.items()}
+
 
 
 # ---------------------------------------------------------------------------
 # Raja Yogas
 # ---------------------------------------------------------------------------
 
-def get_raja_yogas(**params):
-    place, dob, tob, jd, rc = _rasi_chart_objects(**params)
-    details = raja_yoga.get_raja_yoga_details(jd, place)
-    # (dict_of_named_yogas, count_pairs_ok, count_pairs_fail)
-    if isinstance(details, tuple):
-        named = details[0] if details else {}
-    else:
-        named = details
-
-    pairs = raja_yoga.get_raja_yoga_pairs_from_planet_positions(rc)
-
-    return {
-        "named_raja_yogas": named,
-        "raja_yoga_planet_pairs": [
-            [_planet_label(a), _planet_label(b)] for a, b in pairs
-        ] if pairs else [],
-    }
 
 
 # ---------------------------------------------------------------------------
@@ -275,36 +250,7 @@ def _discover_yoga_functions():
     return sorted(names)
 
 
-def get_yogas(**params):
-    """Run every public *_from_jd_place yoga function and list the ones that fire.
-    Each yoga may return True/False or a tuple describing participants — we treat
-    any truthy value as 'present'.
-    """
-    place, dob, tob, jd, rc = _rasi_chart_objects(**params)
 
-    present = []
-    errors = []
-    for fn_name in _discover_yoga_functions():
-        fn = getattr(yoga_mod, fn_name)
-        try:
-            result = fn(jd, place, divisional_chart_factor=1)
-        except Exception as e:
-            errors.append({"yoga": fn_name, "error": str(e)})
-            continue
-        if result:
-            pretty = fn_name.replace("_from_jd_place", "").replace("_", " ")
-            present.append({
-                "yoga": pretty,
-                "function": fn_name,
-                "details": result if not isinstance(result, bool) else True,
-            })
-
-    return {
-        "count_checked": len(_discover_yoga_functions()),
-        "count_present": len(present),
-        "yogas": present,
-        "errors": errors[:10],  # cap the noise
-    }
 
 
 # ---------------------------------------------------------------------------
@@ -320,29 +266,6 @@ _SPHUTA_FUNCS = [
 ]
 
 
-def get_sphutas(**params):
-    place, dob, tob, jd, rc = _rasi_chart_objects(**params)
-    out = {}
-    for fn_name in _SPHUTA_FUNCS:
-        fn = getattr(sphuta, fn_name, None)
-        if fn is None:
-            continue
-        try:
-            r = fn(dob, tob, place)
-        except Exception as e:
-            out[fn_name] = {"error": str(e)}
-            continue
-
-        label = fn_name.replace("_sphuta", "").replace("_", " ").title() + " Sphuta"
-        if isinstance(r, (list, tuple)) and len(r) >= 2:
-            out[label] = {
-                "sign": SIGN_NAMES[int(r[0])] if 0 <= int(r[0]) < 12 else str(r[0]),
-                "sign_number": int(r[0]),
-                "degrees": round(float(r[1]), 4),
-            }
-        else:
-            out[label] = r
-    return out
 
 
 # ---------------------------------------------------------------------------
@@ -368,10 +291,3 @@ def get_graha_yudh(**params):
     }
 
 
-def get_marana_karaka_sthana(**params):
-    place, dob, tob, jd, rc = _rasi_chart_objects(**params)
-    try:
-        mks = charts.get_planets_in_marana_karaka_sthana(rc)
-    except Exception as e:
-        return {"error": str(e)}
-    return [_planet_label(p) for p in mks]

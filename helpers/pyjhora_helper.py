@@ -138,19 +138,101 @@ def _build_inputs(year, month, day, hour, minute, latitude, longitude,
     return place, dob, tob, jd
 
 
+# Vimshottari nakshatra-lord cycle (9), repeats across 27 nakshatras.
+_NAK_LORD_CYCLE = [8, 5, 0, 1, 2, 7, 4, 6, 3]  # Ketu, Ven, Sun, Moo, Mar, Rahu, Jup, Sat, Mer
+
+# Sign-lord table (Aries=Mars ... Pisces=Jupiter)
+_SIGN_LORDS = [2, 5, 3, 1, 0, 3, 5, 2, 4, 6, 6, 4]
+
+# Exaltation sign per planet 0-8 (Sun..Ketu); None = no Vedic dignity (outer planets)
+_EXALT_SIGN = {0: 0, 1: 1, 2: 9, 3: 5, 4: 3, 5: 11, 6: 6, 7: 1, 8: 7}
+_DEBIL_SIGN = {0: 6, 1: 7, 2: 3, 3: 11, 4: 9, 5: 5, 6: 0, 7: 7, 8: 1}
+# Moolatrikona: (sign, deg_lo, deg_hi)
+_MOOLATRIKONA = {
+    0: (4,  0, 20),   # Sun: Leo 0-20
+    1: (1,  4, 30),   # Moon: Taurus 4-30
+    2: (0,  0, 12),   # Mars: Aries 0-12
+    3: (5, 16, 20),   # Mercury: Virgo 16-20
+    4: (8,  0, 10),   # Jupiter: Sagittarius 0-10
+    5: (6,  0, 15),   # Venus: Libra 0-15
+    6: (10, 0, 20),   # Saturn: Aquarius 0-20
+}
+_OWN_SIGNS = {
+    0: [4], 1: [3], 2: [0, 7], 3: [2, 5],
+    4: [8, 11], 5: [1, 6], 6: [9, 10],
+}
+
+
+def _nakshatra_of_longitude(sign_index, degrees):
+    """Return (1-based nak number, pada 1-4, lord name) from sign + deg."""
+    total = float(sign_index) * 30.0 + float(degrees)
+    nak = int(total / (360.0 / 27.0)) % 27
+    pada = int((total % (360.0 / 27.0)) / (360.0 / 27.0 / 4.0)) + 1
+    lord_id = _NAK_LORD_CYCLE[nak % 9]
+    return nak + 1, pada, PLANET_NAMES.get(lord_id, str(lord_id))
+
+
+def _dignity(planet_id, sign_index, degrees):
+    """Classical Parasara dignity: Exalted / Debilitated / Moolatrikona /
+    Own / Friend / Enemy / Neutral. Returns None for outer planets."""
+    try:
+        p = int(planet_id)
+    except (TypeError, ValueError):
+        return None
+    if p not in _EXALT_SIGN:   # Uranus/Neptune/Pluto or Lagna
+        return None
+
+    if sign_index == _EXALT_SIGN[p]:
+        return "Exalted"
+    if sign_index == _DEBIL_SIGN[p]:
+        return "Debilitated"
+    if p in _MOOLATRIKONA:
+        m_sign, lo, hi = _MOOLATRIKONA[p]
+        if sign_index == m_sign and lo <= degrees < hi:
+            return "Moolatrikona"
+    if sign_index in _OWN_SIGNS.get(p, []):
+        return "Own"
+
+    sign_lord = _SIGN_LORDS[sign_index]
+    if p == sign_lord:
+        return "Own"
+    try:
+        from jhora import const
+        if sign_lord in const.friendly_planets[p]:
+            return "Friend"
+        if sign_lord in const.enemy_planets[p]:
+            return "Enemy"
+        return "Neutral"
+    except Exception:
+        return None
+
+
 def _format_planet_position(entry):
     label, sign_data = entry[0], entry[1]
     if isinstance(sign_data, (list, tuple)) and len(sign_data) >= 2:
         sign_index, degrees = sign_data[0], sign_data[1]
     else:
         sign_index, degrees = sign_data, 0
-    return {
+    sign_idx_int = int(sign_index)
+    degrees_f = float(degrees)
+    nak_num, pada, nak_lord = _nakshatra_of_longitude(sign_idx_int, degrees_f)
+    nak_name = _safe_name(NAKSHATRA_NAMES, nak_num - 1, "Nakshatra")
+
+    entry_out = {
         "planet": _planet_label(label),
         "planet_id": label if label != "L" else "L",
-        "sign": _safe_name(SIGN_NAMES, sign_index, "Sign"),
-        "sign_number": int(sign_index),
-        "degrees": round(float(degrees), 4),
+        "sign": _safe_name(SIGN_NAMES, sign_idx_int, "Sign"),
+        "sign_number": sign_idx_int,
+        "sign_lord": PLANET_NAMES.get(_SIGN_LORDS[sign_idx_int], None),
+        "degrees": round(degrees_f, 4),
+        "nakshatra": nak_name,
+        "nakshatra_number": nak_num,
+        "nakshatra_pada": pada,
+        "nakshatra_lord": nak_lord,
+        "relationship": _dignity(label if label != "L" else None,
+                                 sign_idx_int, degrees_f),
     }
+    return entry_out
 
 
 def _to_hms(hours_float):
@@ -434,6 +516,13 @@ def get_ashtottari_dasa(**params):
 _SUN_TO_SATURN = ["Sun", "Moon", "Mars", "Mercury", "Jupiter", "Venus", "Saturn"]
 
 
+# Classical Shad Bala minimum Rupa requirements (BPHS)
+_SHAD_BALA_MIN_RUPA = {
+    "Sun": 5.0, "Moon": 6.0, "Mars": 5.0, "Mercury": 7.0,
+    "Jupiter": 6.5, "Venus": 5.5, "Saturn": 5.0,
+}
+
+
 def get_shad_bala(**params):
     place, dob, tob, jd = _build_inputs(**params)
     sb = strength.shad_bala(jd, place)
@@ -441,7 +530,7 @@ def get_shad_bala(**params):
         return {}
 
     bala_rows = ["Sthana", "Kaala", "Dig", "Cheshta", "Naisargika", "Drik"]
-    out = {}
+    planets = {}
     for i, planet in enumerate(_SUN_TO_SATURN):
         p = {}
         for j, bala in enumerate(bala_rows):
@@ -455,14 +544,63 @@ def get_shad_bala(**params):
             p["Ratio"] = round(float(sb[8][i]), 2) if len(sb) > 8 else None
         except (IndexError, TypeError, ValueError):
             pass
-        out[planet] = p
-    return out
+        planets[planet] = p
+
+    # Build ranking by Rupa (strongest = rank 1)
+    rupa_pairs = [(name, p.get("Rupa")) for name, p in planets.items()]
+    rupa_pairs = [(n, r) for n, r in rupa_pairs if r is not None]
+    rupa_pairs.sort(key=lambda x: x[1], reverse=True)
+
+    ranking = []
+    for rank, (name, rupa) in enumerate(rupa_pairs, start=1):
+        min_req = _SHAD_BALA_MIN_RUPA.get(name)
+        passes = (rupa >= min_req) if min_req is not None else None
+        ranking.append({
+            "rank": rank,
+            "planet": name,
+            "rupa": rupa,
+            "ratio": planets[name].get("Ratio"),
+            "minimum_required": min_req,
+            "meets_minimum": passes,
+        })
+        planets[name]["rank"] = rank
+        planets[name]["minimum_required"] = min_req
+        planets[name]["meets_minimum"] = passes
+
+    strongest = ranking[0]["planet"] if ranking else None
+    weakest = ranking[-1]["planet"] if ranking else None
+
+    return {
+        "planets": planets,
+        "ranking": ranking,
+        "strongest": strongest,
+        "weakest": weakest,
+        "note": (
+            "Rank is by Rupa (total Shad Bala / 60). 1 = strongest. "
+            "meets_minimum compares Rupa against the classical BPHS minimum "
+            "(Sun 5, Moon 6, Mars 5, Mercury 7, Jupiter 6.5, Venus 5.5, Saturn 5)."
+        ),
+    }
 
 
-def get_harsha_bala(**params):
-    place, dob, tob, jd = _build_inputs(**params)
-    hb = strength.harsha_bala(dob, tob, place)
-    return {_planet_label(k): v for k, v in hb.items()}
+
+
+
+# Classical house significations (1-based)
+_HOUSE_NAMES = {
+    1: "Tanu (Self/Body)",
+    2: "Dhana (Wealth/Family)",
+    3: "Sahaja (Siblings/Courage)",
+    4: "Sukha (Home/Mother)",
+    5: "Putra (Children/Intellect)",
+    6: "Ari (Enemies/Health)",
+    7: "Yuvati (Spouse/Partnership)",
+    8: "Randhra (Longevity/Secrets)",
+    9: "Dharma (Fortune/Father)",
+    10: "Karma (Career/Status)",
+    11: "Labha (Gains/Income)",
+    12: "Vyaya (Losses/Moksha)",
+}
 
 
 def get_bhava_bala(**params):
@@ -471,28 +609,63 @@ def get_bhava_bala(**params):
         bb = strength.bhava_bala(jd, place)
     except Exception as e:
         return {"error": str(e)}
-    return bb
 
+    # bb is typically [totals(12), rupa(12), ratio(12)]
+    if not bb or len(bb) < 2:
+        return {"houses": [], "ranking": [], "raw": bb}
 
-def get_benefics_malefics(**params):
-    place, dob, tob, jd = _build_inputs(**params)
-    ben = charts.benefics(jd, place)
-    mal = charts.malefics(jd, place)
+    totals = list(bb[0]) if len(bb) > 0 else [None] * 12
+    rupas = list(bb[1]) if len(bb) > 1 else [None] * 12
+    ratios = list(bb[2]) if len(bb) > 2 else [None] * 12
+
+    houses = []
+    for i in range(12):
+        houses.append({
+            "house": i + 1,
+            "name": _HOUSE_NAMES[i + 1],
+            "total": round(float(totals[i]), 2) if i < len(totals) and totals[i] is not None else None,
+            "rupa": round(float(rupas[i]), 2) if i < len(rupas) and rupas[i] is not None else None,
+            "ratio": round(float(ratios[i]), 2) if i < len(ratios) and ratios[i] is not None else None,
+        })
+
+    # Rank by rupa (strongest = 1)
+    rankable = [h for h in houses if h["rupa"] is not None]
+    rankable.sort(key=lambda h: h["rupa"], reverse=True)
+    ranking = []
+    for rank, h in enumerate(rankable, start=1):
+        ranking.append({
+            "rank": rank,
+            "house": h["house"],
+            "name": h["name"],
+            "rupa": h["rupa"],
+            "ratio": h["ratio"],
+        })
+        # attach rank back to the per-house entry
+        for entry in houses:
+            if entry["house"] == h["house"]:
+                entry["rank"] = rank
+                break
+
+    strongest = ranking[0]["house"] if ranking else None
+    weakest = ranking[-1]["house"] if ranking else None
+
     return {
-        "benefics": [_planet_label(p) for p in ben],
-        "malefics": [_planet_label(p) for p in mal],
+        "houses": houses,
+        "ranking": ranking,
+        "strongest_house": strongest,
+        "weakest_house": weakest,
+        "note": (
+            "Rank is by Rupa (total Bhava Bala / 60). 1 = strongest house. "
+            "A classically well-supported bhava usually has Rupa >= 1.0 (ratio >= 1). "
+            "Weak houses (rupa below 1) indicate areas that need remedial support."
+        ),
     }
 
 
-def get_retrograde_combustion(**params):
-    place, dob, tob, jd = _build_inputs(**params)
-    rc = charts.rasi_chart(jd, place)
-    retro = charts.planets_in_retrograde(rc)
-    comb = charts.planets_in_combustion(rc)
-    return {
-        "retrograde": [_planet_label(p) for p in retro],
-        "combust": [_planet_label(p) for p in comb],
-    }
+
+
+
+
 
 
 def get_kp_chart(**params):
@@ -522,103 +695,8 @@ def get_kp_chart(**params):
 # Match & muhurta
 # ---------------------------------------------------------------------------
 
-def get_ashtakoota_match(boy_nakshatra, boy_pada, girl_nakshatra, girl_pada, method="North"):
-    ak = compatibility.Ashtakoota(
-        int(boy_nakshatra), int(boy_pada), int(girl_nakshatra), int(girl_pada), method=method,
-    )
-    result = {
-        "total_score": ak.compatibility_score(),
-        "boy_nakshatra": _safe_name(NAKSHATRA_NAMES, boy_nakshatra - 1, "Nak"),
-        "boy_pada": boy_pada,
-        "girl_nakshatra": _safe_name(NAKSHATRA_NAMES, girl_nakshatra - 1, "Nak"),
-        "girl_pada": girl_pada,
-        "method": method,
-        "details": {
-            "varna": ak.varna_porutham(),
-            "vasiya": ak.vasiya_porutham(),
-            "tara": ak.tara_porutham(),
-            "yoni": ak.yoni_porutham(),
-            "maitri": ak.maitri_porutham(),
-            "gana": ak.gana_porutham(),
-            "bahut": ak.bahut_porutham(),
-            "naadi": ak.naadi_porutham(),
-            "dina": ak.dina_porutham(),
-            "raasi": ak.raasi_porutham(),
-            "raasi_adhipathi": ak.raasi_adhipathi_porutham(),
-            "rajju": ak.rajju_porutham(),
-            "vedha": ak.vedha_porutham(),
-            "mahendra": ak.mahendra_porutham(),
-            "sthree_dheerga": ak.sthree_dheerga_porutham(),
-        },
-    }
-    if method == "South":
-        result["details_south"] = {
-            "dina": ak.dina_porutham_south(),
-            "gana": ak.gana_porutham_south(),
-            "raasi": ak.raasi_porutham_south(),
-            "raasi_adhipathi": ak.raasi_adhipathi_porutham_south(),
-            "rajju": ak.rajju_porutham_south(),
-            "vedha": ak.vedha_porutham_south(),
-            "vasiya": ak.vasiya_porutham_south(),
-            "yoni": ak.yoni_porutham_south(),
-            "mahendra": ak.mahendra_porutham_south(),
-            "sthree_dheerga": ak.sthree_dheerga_porutham_south(),
-        }
-    return result
 
 
-def get_muhurta_data(**params):
-    place, dob, tob, jd = _build_inputs(**params)
-    safe_calls = [
-        ("abhijit_muhurta", drik.abhijit_muhurta),
-        ("durmuhurtam", drik.durmuhurtam),
-        ("raahu_kaalam", drik.raahu_kaalam),
-        ("gulikai_kaalam", drik.gulikai_kaalam),
-        ("yamaganda_kaalam", drik.yamaganda_kaalam),
-        ("shubha_hora", drik.shubha_hora),
-        ("brahma_muhurtha", getattr(drik, "brahma_muhurtha", None)),
-        ("godhuli_muhurtha", getattr(drik, "godhuli_muhurtha", None)),
-        ("nishita_kaala", getattr(drik, "nishita_kaala", None)),
-        ("sahasra_chandrodayam", getattr(drik, "sahasra_chandrodayam", None)),
-        ("anandhaadhi_yoga", getattr(drik, "anandhaadhi_yoga", None)),
-        ("pushkara_yoga", getattr(drik, "pushkara_yoga", None)),
-        ("triguna", getattr(drik, "triguna", None)),
-    ]
-    out = {}
-    for key, fn in safe_calls:
-        if fn is None:
-            continue
-        try:
-            out[key] = fn(jd, place)
-        except Exception as e:
-            out[key] = {"error": str(e)}
-    return out
 
 
-# ---------------------------------------------------------------------------
-# Bundled horoscope
-# ---------------------------------------------------------------------------
 
-def get_complete_horoscope(**params):
-    result = {
-        "rasi_chart": get_rasi_chart(**params),
-        "panchanga": get_panchanga(**params),
-        "bhava_chart": get_bhava_chart(**params),
-        "benefics_malefics": get_benefics_malefics(**params),
-        "retrograde_combustion": get_retrograde_combustion(**params),
-        "kp_chart": None,
-        "shad_bala": None,
-        "vimsottari_dasa": None,
-        "navamsa_chart": None,
-    }
-    for key, call in [
-        ("shad_bala", lambda: get_shad_bala(**params)),
-        ("vimsottari_dasa", lambda: get_vimsottari_dasa(**params)),
-        ("kp_chart", lambda: get_kp_chart(**params)),
-        ("navamsa_chart", lambda: get_divisional_chart(divisional_chart_factor=9, **params)),
-    ]:
-        try:
-            result[key] = call()
-        except Exception as e:
-            result[key] = {"error": str(e)}
-    return result

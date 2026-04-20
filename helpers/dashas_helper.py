@@ -105,8 +105,6 @@ DASHA_REGISTRY = {
 }
 
 
-def available_dashas():
-    return sorted(DASHA_REGISTRY.keys())
 
 
 def _normalise_entries(raw):
@@ -160,28 +158,4 @@ def _normalise_entries(raw):
     return result
 
 
-def run_dasha(dasha, options=None, **params):
-    key = str(dasha).lower().strip()
-    if key not in DASHA_REGISTRY:
-        raise ValueError(
-            f"Unknown dasha '{dasha}'. Available: {available_dashas()}"
-        )
 
-    place, dob, tob, jd = _build_inputs(**params)
-    ctx = {"place": place, "dob": dob, "tob": tob, "jd": jd}
-    kwargs = dict(options or {})
-
-    # Translate the convenience alias `depth` -> dhasa_level_index
-    if "depth" in kwargs:
-        depth = kwargs.pop("depth")
-        try:
-            kwargs["dhasa_level_index"] = int(depth)
-        except (TypeError, ValueError):
-            enum_key = str(depth).upper()
-            if hasattr(const.MAHA_DHASA_DEPTH, enum_key):
-                kwargs["dhasa_level_index"] = int(getattr(const.MAHA_DHASA_DEPTH, enum_key))
-
-    raw = DASHA_REGISTRY[key](ctx, **kwargs)
-    normalised = _normalise_entries(raw)
-    normalised["dasha"] = key
-    return normalised

@@ -86,29 +86,7 @@ def _is_night_birth(jd, place):
         return False
 
 
-# -----------------------------------------------------------------------------
-# Sahams
-# -----------------------------------------------------------------------------
 
-def get_sahams(night_time_birth=None, **params):
-    place, dob, tob, jd = _build_inputs(**params)
-    pp = charts.rasi_chart(jd, place)
-    night = bool(night_time_birth) if night_time_birth is not None else _infer_night(jd, place, tob)
-
-    sahams = {}
-    for fn_name in SAHAM_FUNCTIONS:
-        fn = getattr(saham, fn_name)
-        try:
-            try:
-                val = fn(pp, night_time_birth=night)
-            except TypeError:
-                val = fn(pp)
-            if val is None:
-                continue
-            sahams[fn_name.replace("_saham", "")] = _longitude_to_sign_deg(float(val))
-        except Exception as e:
-            sahams[fn_name.replace("_saham", "")] = {"error": f"{type(e).__name__}: {e}"}
-    return {"night_time_birth": night, "sahams": sahams}
 
 
 def _infer_night(jd, place, tob):
@@ -124,64 +102,7 @@ def _infer_night(jd, place, tob):
         return False
 
 
-# -----------------------------------------------------------------------------
-# Tajaka — Annual (Varsha) and Monthly (Maasa) charts
-# -----------------------------------------------------------------------------
 
-def get_annual_chart(years=1, divisional_chart_factor=1, **params):
-    place, dob, tob, jd = _build_inputs(**params)
-    chart, meta = tajaka.varsha_pravesh(jd, place,
-                                        divisional_chart_factor=divisional_chart_factor,
-                                        years=int(years))
-    lord = tajaka.lord_of_the_year(jd, place, int(years))
-    asc_house = chart[0][1][0] if chart and chart[0][0] == "L" else 0
-    muntha = tajaka.muntha_house(int(asc_house), int(years))
-    return {
-        "years_completed": int(years),
-        "divisional_chart_factor": int(divisional_chart_factor),
-        "pravesh_meta": _format_pravesh_meta(meta),
-        "planet_positions": _planet_positions_to_json(chart),
-        "lord_of_the_year": {
-            "planet_index": int(lord),
-            "planet": PLANET_NAMES.get(int(lord), str(lord)),
-        },
-        "muntha_house": int(muntha),
-    }
-
-
-def get_monthly_chart(years=1, months=1, divisional_chart_factor=1, **params):
-    place, dob, tob, jd = _build_inputs(**params)
-    chart, meta = tajaka.monthly_chart(jd, place,
-                                       divisional_chart_factor=divisional_chart_factor,
-                                       years=int(years), months=int(months))
-    lord = tajaka.lord_of_the_month(jd, place, int(years), int(months))
-    return {
-        "years_completed": int(years),
-        "months_into_year": int(months),
-        "divisional_chart_factor": int(divisional_chart_factor),
-        "pravesh_meta": _format_pravesh_meta(meta),
-        "planet_positions": _planet_positions_to_json(chart),
-        "lord_of_the_month": {
-            "planet_index": int(lord),
-            "planet": PLANET_NAMES.get(int(lord), str(lord)),
-        },
-    }
-
-
-def get_sixty_hour_chart(years=1, months=1, sixty_hour_count=1,
-                         divisional_chart_factor=1, **params):
-    place, dob, tob, jd = _build_inputs(**params)
-    chart, meta = tajaka.sixty_hour_chart(jd, place,
-                                          divisional_chart_factor=divisional_chart_factor,
-                                          years=int(years), months=int(months),
-                                          sixty_hour_count=int(sixty_hour_count))
-    return {
-        "years_completed": int(years),
-        "months_into_year": int(months),
-        "sixty_hour_count": int(sixty_hour_count),
-        "pravesh_meta": _format_pravesh_meta(meta),
-        "planet_positions": _planet_positions_to_json(chart),
-    }
 
 
 def _format_pravesh_meta(meta):
@@ -232,26 +153,6 @@ def _name_tuple(t):
     return {"planets": names, "raw": list(t)}
 
 
-def get_tajaka_yogas(**params):
-    place, dob, tob, jd = _build_inputs(**params)
-    pp = charts.rasi_chart(jd, place)
-    out = {}
-    for name, fn in _TAJAKA_YOGA_SIMPLE:
-        try:
-            result = fn(pp, jd, place)
-            out[name] = _label_pairs(result)
-        except Exception as e:
-            out[name] = {"error": f"{type(e).__name__}: {e}"}
-    # Simple house-based yogas
-    phd = _planet_to_house_dict(pp)
-    for n in ("ishkavala_yoga", "induvara_yoga"):
-        fn = getattr(tajaka_yoga, n, None)
-        if fn:
-            try:
-                out[n] = bool(fn(phd))
-            except Exception as e:
-                out[n] = {"error": f"{type(e).__name__}: {e}"}
-    return out
 
 
 def _planet_to_house_dict(pp):
@@ -292,50 +193,7 @@ def _format_eclipse_entry(raw):
     return {"type": kind, "contacts": times}
 
 
-def get_eclipses(search_forward_years=10, **params):
-    place, dob, tob, jd = _build_inputs(**params)
-    lunars, solars = [], []
 
-    cursor = jd
-    for _ in range(int(search_forward_years)):
-        try:
-            le = eclipse.next_lunar_eclipse(cursor, place)
-            formatted = _format_eclipse_entry(le)
-            if formatted:
-                lunars.append(formatted)
-                max_time = le[1][0] if le and le[1] else None
-                if isinstance(max_time, (list, tuple)) and len(max_time) >= 4:
-                    # Advance cursor by ~30 days past the max
-                    cursor = _gregorian_to_jd_forward(max_time, place) + 30
-                else:
-                    break
-            else:
-                break
-        except Exception:
-            break
-
-    cursor = jd
-    for _ in range(int(search_forward_years)):
-        try:
-            se = eclipse.next_solar_eclipse(cursor, place)
-            formatted = _format_eclipse_entry(se)
-            if formatted:
-                solars.append(formatted)
-                max_time = se[1][0] if se and se[1] else None
-                if isinstance(max_time, (list, tuple)) and len(max_time) >= 4:
-                    cursor = _gregorian_to_jd_forward(max_time, place) + 30
-                else:
-                    break
-            else:
-                break
-        except Exception:
-            break
-
-    return {
-        "searched_years": int(search_forward_years),
-        "lunar_eclipses": lunars,
-        "solar_eclipses": solars,
-    }
 
 
 def _gregorian_to_jd_forward(date_tuple, place):

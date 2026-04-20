@@ -2,12 +2,6 @@
 # Licensed under the GNU Affero General Public License v3.0 or later.
 # See LICENSE and NOTICE in the project root for full terms.
 
-"""Flask dispatcher for the PyJHora-backed Vedic astrology API.
-
-The endpoint count grew from ~14 to ~50 once the expanded helpers landed; to
-keep this file readable we use a small `endpoint(...)` decorator that handles
-body parsing, validation, per-request config overrides, and response framing
-uniformly. Each route body is now one line invoking its helper."""
 
 import io
 import os
@@ -19,15 +13,11 @@ from flask import Flask, jsonify, request, send_file
 
 from logger import logger as logger_mod
 
-# Importing this module runs init_pyjhora_defaults() as a side-effect.
 from helpers import (
     jhora_config,
     pyjhora_helper,
     advanced_helper,
-    dashas_helper,
-    panchanga_extras,
-    transits_helper,
-    vratha_helper,
+    kundali_extras,
     chart_image,
 )
 from helpers.validators import (
@@ -50,10 +40,6 @@ SERVICE_VERSION = "1.0.0"
 SERVICE_NAME = "unlimited-astro-open"
 
 
-# ---------------------------------------------------------------------------
-# App configuration (env-driven)
-# ---------------------------------------------------------------------------
-
 def _truthy(v):
     return str(v).lower() in {"1", "true", "yes", "on"}
 
@@ -75,10 +61,6 @@ def enforce_security():
         return jsonify({"status": -1, "message": "Forbidden"}), 403
     return None
 
-
-# ---------------------------------------------------------------------------
-# Response framing
-# ---------------------------------------------------------------------------
 
 def _ok(data=None, **extra):
     payload = {"status": 1}
@@ -248,38 +230,17 @@ def jhora_bhava_chart(**p):
         bhava_madhya_method=int(method) if method is not None else None, **p,
     )
 
-
-# ---------------------------------------------------------------------------
-# Panchanga
-# ---------------------------------------------------------------------------
-
 @app.route("/jhora/panchanga", methods=["POST"])
 @endpoint()
 def jhora_panchanga(**p): return pyjhora_helper.get_panchanga(**p)
 
-
-@app.route("/jhora/panchanga-extras", methods=["POST"])
-@endpoint()
-def jhora_panchanga_extras(**p): return panchanga_extras.get_panchanga_extras(**p)
-
-
-@app.route("/jhora/muhurta", methods=["POST"])
-@endpoint()
-def jhora_muhurta(**p): return pyjhora_helper.get_muhurta_data(**p)
-
-
-# ---------------------------------------------------------------------------
-# Strengths and chart diagnostics
-# ---------------------------------------------------------------------------
 
 @app.route("/jhora/shad-bala", methods=["POST"])
 @endpoint()
 def jhora_shad_bala(**p): return pyjhora_helper.get_shad_bala(**p)
 
 
-@app.route("/jhora/harsha-bala", methods=["POST"])
-@endpoint()
-def jhora_harsha_bala(**p): return pyjhora_helper.get_harsha_bala(**p)
+
 
 
 @app.route("/jhora/bhava-bala", methods=["POST"])
@@ -287,30 +248,11 @@ def jhora_harsha_bala(**p): return pyjhora_helper.get_harsha_bala(**p)
 def jhora_bhava_bala(**p): return pyjhora_helper.get_bhava_bala(**p)
 
 
-@app.route("/jhora/benefics-malefics", methods=["POST"])
-@endpoint()
-def jhora_benefics_malefics(**p): return pyjhora_helper.get_benefics_malefics(**p)
-
-
-@app.route("/jhora/retrograde-combustion", methods=["POST"])
-@endpoint()
-def jhora_retrograde_combustion(**p): return pyjhora_helper.get_retrograde_combustion(**p)
-
 
 @app.route("/jhora/graha-yudh", methods=["POST"])
 @endpoint()
 def jhora_graha_yudh(**p): return advanced_helper.get_graha_yudh(**p)
 
-
-@app.route("/jhora/marana-karaka-sthana", methods=["POST"])
-@endpoint()
-def jhora_marana_karaka_sthana(**p):
-    return advanced_helper.get_marana_karaka_sthana(**p)
-
-
-# ---------------------------------------------------------------------------
-# Advanced charts
-# ---------------------------------------------------------------------------
 
 @app.route("/jhora/kp-chart", methods=["POST"])
 @endpoint()
@@ -322,67 +264,11 @@ def jhora_kp_chart(**p): return pyjhora_helper.get_kp_chart(**p)
 def jhora_ashtakavarga(**p): return advanced_helper.get_ashtakavarga(**p)
 
 
-@app.route("/jhora/arudhas", methods=["POST"])
+
+@app.route("/jhora/karakamsa", methods=["POST"])
 @endpoint()
-def jhora_arudhas(**p): return advanced_helper.get_arudhas(**p)
+def jhora_karakamsa(**p): return advanced_helper.get_karakamsa(**p)
 
-
-@app.route("/jhora/chara-karakas", methods=["POST"])
-@endpoint()
-def jhora_chara_karakas(**p): return advanced_helper.get_chara_karakas(**p)
-
-
-@app.route("/jhora/upagrahas", methods=["POST"])
-@endpoint()
-def jhora_upagrahas(**p): return advanced_helper.get_upagrahas(**p)
-
-
-@app.route("/jhora/special-lagnas", methods=["POST"])
-@endpoint()
-def jhora_special_lagnas(**p): return advanced_helper.get_special_lagnas(**p)
-
-
-@app.route("/jhora/sphutas", methods=["POST"])
-@endpoint()
-def jhora_sphutas(**p): return advanced_helper.get_sphutas(**p)
-
-
-@app.route("/jhora/yogas", methods=["POST"])
-@endpoint()
-def jhora_yogas(**p): return advanced_helper.get_yogas(**p)
-
-
-@app.route("/jhora/raja-yogas", methods=["POST"])
-@endpoint()
-def jhora_raja_yogas(**p): return advanced_helper.get_raja_yogas(**p)
-
-
-@app.route("/jhora/doshas", methods=["POST"])
-@endpoint()
-def jhora_doshas(**p): return advanced_helper.get_doshas(**p)
-
-
-# ---------------------------------------------------------------------------
-# Dashas
-# ---------------------------------------------------------------------------
-
-@app.route("/jhora/dashas/available", methods=["GET"])
-def jhora_dashas_available():
-    return _ok({"dashas": dashas_helper.available_dashas()})
-
-
-@app.route("/jhora/dasha", methods=["POST"])
-@endpoint()
-def jhora_dasha(**p):
-    body = request.get_json(silent=True) or {}
-    dasha = body.get("dasha")
-    if not dasha:
-        raise ValidationError("Missing field: dasha")
-    options = body.get("options") or {}
-    depth = body.get("depth")
-    if depth is not None:
-        options.setdefault("depth", depth)
-    return dashas_helper.run_dasha(dasha, options=options, **p)
 
 
 # Convenience routes for the three most common dashas.
@@ -401,162 +287,15 @@ def jhora_yogini_dasa(**p): return pyjhora_helper.get_yogini_dasa(**p)
 def jhora_ashtottari_dasa(**p): return pyjhora_helper.get_ashtottari_dasa(**p)
 
 
-# ---------------------------------------------------------------------------
-# Transits, Sahams, Tajaka, Eclipses
-# ---------------------------------------------------------------------------
-
-@app.route("/jhora/sahams", methods=["POST"])
+@app.route("/jhora/friendship", methods=["POST"])
 @endpoint()
-def jhora_sahams(**p):
-    body = request.get_json(silent=True) or {}
-    night = body.get("night_time_birth")
-    return transits_helper.get_sahams(night_time_birth=night, **p)
+def jhora_friendship(**p): return kundali_extras.get_friendship(**p)
 
 
-@app.route("/jhora/annual-chart", methods=["POST"])
+@app.route("/jhora/avakhada-chakra", methods=["POST"])
 @endpoint()
-def jhora_annual_chart(**p):
-    body = request.get_json(silent=True) or {}
-    years = body.get("years", 1)
-    dcf = body.get("divisional_chart_factor", 1)
-    return transits_helper.get_annual_chart(years=int(years),
-                                            divisional_chart_factor=int(dcf), **p)
+def jhora_avakhada_chakra(**p): return kundali_extras.get_avakhada_chakra(**p)
 
-
-@app.route("/jhora/monthly-chart", methods=["POST"])
-@endpoint()
-def jhora_monthly_chart(**p):
-    body = request.get_json(silent=True) or {}
-    years = body.get("years", 1)
-    months = body.get("months", 1)
-    dcf = body.get("divisional_chart_factor", 1)
-    return transits_helper.get_monthly_chart(
-        years=int(years), months=int(months),
-        divisional_chart_factor=int(dcf), **p,
-    )
-
-
-@app.route("/jhora/sixty-hour-chart", methods=["POST"])
-@endpoint()
-def jhora_sixty_hour_chart(**p):
-    body = request.get_json(silent=True) or {}
-    return transits_helper.get_sixty_hour_chart(
-        years=int(body.get("years", 1)),
-        months=int(body.get("months", 1)),
-        sixty_hour_count=int(body.get("sixty_hour_count", 1)),
-        divisional_chart_factor=int(body.get("divisional_chart_factor", 1)),
-        **p,
-    )
-
-
-@app.route("/jhora/tajaka-yogas", methods=["POST"])
-@endpoint()
-def jhora_tajaka_yogas(**p): return transits_helper.get_tajaka_yogas(**p)
-
-
-@app.route("/jhora/eclipses", methods=["POST"])
-@endpoint()
-def jhora_eclipses(**p):
-    body = request.get_json(silent=True) or {}
-    years = int(body.get("search_forward_years", 10))
-    return transits_helper.get_eclipses(search_forward_years=years, **p)
-
-
-# ---------------------------------------------------------------------------
-# Vratha / festivals
-# ---------------------------------------------------------------------------
-
-@app.route("/jhora/vratha/types", methods=["GET"])
-def vratha_types():
-    return _ok(vratha_helper.list_vratha_types())
-
-
-@app.route("/jhora/vratha/dates", methods=["POST"])
-@endpoint()
-def jhora_vratha_dates(**p):
-    body = request.get_json(silent=True) or {}
-    vtype = body.get("vratha_type")
-    start = body.get("start_date")
-    end = body.get("end_date")
-    if not vtype or not start:
-        raise ValidationError("Missing fields: vratha_type, start_date")
-    return vratha_helper.get_vratha_dates(vtype, start, end, **p)
-
-
-@app.route("/jhora/festivals/day", methods=["POST"])
-@endpoint()
-def jhora_festivals_day(**p):
-    body = request.get_json(silent=True) or {}
-    return vratha_helper.get_festivals_on_day(
-        language=body.get("language", "en"),
-        festival_name_contains=body.get("festival_name_contains"),
-        **p,
-    )
-
-
-@app.route("/jhora/festivals/between", methods=["POST"])
-@endpoint()
-def jhora_festivals_between(**p):
-    body = request.get_json(silent=True) or {}
-    start = body.get("start_date")
-    end = body.get("end_date")
-    if not start or not end:
-        raise ValidationError("Missing fields: start_date, end_date")
-    return vratha_helper.get_festivals_between(
-        start, end,
-        language=body.get("language", "en"),
-        festival_name_contains=body.get("festival_name_contains"),
-        **p,
-    )
-
-
-@app.route("/jhora/tithi-pravesha", methods=["POST"])
-@endpoint()
-def jhora_tithi_pravesha(**p):
-    body = request.get_json(silent=True) or {}
-    year_number = body.get("year_number")
-    if year_number is None:
-        raise ValidationError("Missing field: year_number")
-    return vratha_helper.get_tithi_pravesha(
-        int(year_number),
-        plus_or_minus_duration_in_days=int(body.get("plus_or_minus_duration_in_days", 30)),
-        **p,
-    )
-
-
-# ---------------------------------------------------------------------------
-# Match
-# ---------------------------------------------------------------------------
-
-@app.route("/jhora/ashtakoota-match", methods=["POST"])
-def jhora_ashtakoota_match():
-    try:
-        body = request.get_json(silent=True) or {}
-        session_cfg = extract_session_config(body)
-        if session_cfg:
-            jhora_config.set_session_config(**session_cfg)
-        params = extract_match_params(body)
-        data = pyjhora_helper.get_ashtakoota_match(**params)
-        return _ok(data)
-    except ValidationError as ve:
-        return _err(str(ve), 400)
-    except Exception as e:
-        logging.exception("ashtakoota-match failed")
-        return _err(str(e), 500)
-
-
-# ---------------------------------------------------------------------------
-# Complete horoscope (everything-in-one)
-# ---------------------------------------------------------------------------
-
-@app.route("/jhora/complete-horoscope", methods=["POST"])
-@endpoint()
-def jhora_complete_horoscope(**p): return pyjhora_helper.get_complete_horoscope(**p)
-
-
-# ---------------------------------------------------------------------------
-# Chart image rendering (PNG)
-# ---------------------------------------------------------------------------
 
 @app.route("/jhora/chart-image", methods=["POST"])
 def jhora_chart_image():
@@ -568,6 +307,34 @@ def jhora_chart_image():
         params = extract_birth_params(body)
         chart_type = body.get("chart_type", "D1_Rasi")
         size = int(body.get("size", 600))
+        label_mode = str(body.get("label_mode", "degrees")).lower()
+
+        # Bhava/Chalit takes a separate renderer and its own label_mode vocabulary.
+        if chart_type in {"Bhava", "Chalit", "bhava", "chalit"}:
+            if label_mode == "degrees":
+                label_mode = "house"
+            if label_mode not in {"house", "cusp", "none"}:
+                return _err(
+                    f"Unknown label_mode for Bhava chart: {label_mode}. "
+                    "Use one of: house, cusp, none"
+                )
+            method = body.get("bhaava_madhya_method", body.get("bhava_madhya_method"))
+            bhava = pyjhora_helper.get_bhava_chart(
+                bhava_madhya_method=int(method) if method is not None else None,
+                **params,
+            )
+            png_bytes = chart_image.generate_bhava_chart(
+                bhava, title="Bhava / Chalit Chart", size=size, label_mode=label_mode,
+            )
+            return send_file(io.BytesIO(png_bytes),
+                             mimetype="image/png",
+                             download_name="bhava_chart.png")
+
+        if label_mode not in {"degrees", "sign_number", "both", "none"}:
+            return _err(
+                f"Unknown label_mode: {label_mode}. Use one of: "
+                "degrees, sign_number, both, none"
+            )
 
         if chart_type == "D1_Rasi":
             data = pyjhora_helper.get_rasi_chart(**params)
@@ -579,7 +346,9 @@ def jhora_chart_image():
             data = all_charts[chart_type]
             title = chart_type.replace("_", " ")
 
-        png_bytes = chart_image.generate_chart_image(data, chart_name=title, size=size)
+        png_bytes = chart_image.generate_chart_image(
+            data, chart_name=title, size=size, label_mode=label_mode,
+        )
         return send_file(io.BytesIO(png_bytes),
                          mimetype="image/png",
                          download_name=f"{chart_type}.png")

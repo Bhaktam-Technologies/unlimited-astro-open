@@ -367,6 +367,137 @@ def get_bhava_chart(bhava_madhya_method=None, **params):
     return {"bhaava_madhya_method": method, "houses": houses}
 
 
+_SIGN_ABBR = ["Ari", "Tau", "Gem", "Can", "Leo", "Vir", "Lib", "Sco", "Sag", "Cap", "Aqu", "Pis"]
+
+
+def _deg_to_dms(deg_abs):
+    """Convert absolute zodiacal degrees (0-360) to (sign_abbr, deg, min, sec) within sign."""
+    deg_abs = float(deg_abs) % 360
+    sign_idx = int(deg_abs / 30)
+    within = deg_abs - sign_idx * 30
+    d = int(within)
+    m = int((within - d) * 60)
+    s = round(((within - d) * 60 - m) * 60)
+    if s == 60:
+        s = 0
+        m += 1
+    if m == 60:
+        m = 0
+        d += 1
+    return _SIGN_ABBR[sign_idx % 12], d, m, s
+
+
+def get_chalit_table(bhava_madhya_method=None, **params):
+    place, dob, tob, jd = _build_inputs(**params)
+    method = int(bhava_madhya_method) if bhava_madhya_method is not None else const.bhaava_madhya_method
+    bc = charts.bhava_chart(jd, place, bhava_madhya_method=method)
+
+    rows = []
+    for entry in bc:
+        house_num, cusps, _ = entry[0], entry[1], entry[2]
+        cusp_start, cusp_mid, _ = cusps
+        begin_sign, bd, bm, bs = _deg_to_dms(cusp_start)
+        mid_sign, md, mm, ms = _deg_to_dms(cusp_mid)
+        rows.append({
+            "bh": int(house_num),
+            "begin_sign": begin_sign,
+            "begin_deg": bd,
+            "begin_min": bm,
+            "begin_sec": bs,
+            "mid_sign": mid_sign,
+            "mid_deg": md,
+            "mid_min": mm,
+            "mid_sec": ms,
+        })
+
+    return {"bhaava_madhya_method": method, "chalit_table": rows}
+
+
+# ---------------------------------------------------------------------------
+# Bhav Madhya Chart — planet vs house-midpoint aspect table
+# ---------------------------------------------------------------------------
+
+_PLANET_ABBR = ["SU", "MO", "MA", "ME", "JU", "VE", "SA", "RA", "KE"]
+
+_ASPECTS = [
+    ("CJ",   0.0, 8.0),
+    ("SX",  60.0, 6.0),
+    ("SQ",  90.0, 7.0),
+    ("TR", 120.0, 8.0),
+    ("QC", 150.0, 5.0),
+    ("OP", 180.0, 8.0),
+]
+
+
+def _angular_distance(a, b):
+    diff = abs(float(a) - float(b)) % 360
+    return diff if diff <= 180 else 360 - diff
+
+
+def _aspect_cell(planet_lon, madhya_lon):
+    dist = _angular_distance(planet_lon, madhya_lon)
+    best = None
+    best_orb = None
+    for name, exact, max_orb in _ASPECTS:
+        orb = abs(dist - exact)
+        if orb <= max_orb:
+            if best_orb is None or orb < best_orb:
+                best, best_orb = name, orb
+    if best is None:
+        return "--"
+    return f"{best} {round(best_orb, 2)}"
+
+
+def get_bhav_madhya_chart(bhava_madhya_method=None, **params):
+    place, dob, tob, jd = _build_inputs(**params)
+    method = int(bhava_madhya_method) if bhava_madhya_method is not None else const.bhaava_madhya_method
+
+    rc = charts.rasi_chart(jd, place)
+    planet_lons = {}
+    for entry in rc:
+        label, sign_data = entry[0], entry[1]
+        if isinstance(sign_data, (list, tuple)) and len(sign_data) >= 2:
+            lon = int(sign_data[0]) * 30 + float(sign_data[1])
+        else:
+            lon = float(sign_data) * 30
+        idx = int(label) if str(label).lstrip("-").isdigit() else None
+        if idx is not None and 0 <= idx <= 8:
+            planet_lons[idx] = lon
+
+    bc = charts.bhava_chart(jd, place, bhava_madhya_method=method)
+    madhya_lons = {}
+    for entry in bc:
+        house_num, cusps = entry[0], entry[1]
+        madhya_lons[int(house_num)] = float(cusps[1])
+
+    columns = list(range(1, 13))
+    rows = []
+    for p_idx, abbr in enumerate(_PLANET_ABBR):
+        if p_idx not in planet_lons:
+            continue
+        p_lon = planet_lons[p_idx]
+        cols = {"planet": abbr}
+        for h in columns:
+            m_lon = madhya_lons.get(h)
+            cols[str(h)] = _aspect_cell(p_lon, m_lon) if m_lon is not None else "--"
+        rows.append(cols)
+
+    return {
+        "bhaava_madhya_method": method,
+        "columns": [str(h) for h in columns],
+        "legend": {
+            "CJ": "Conjunction (0°)",
+            "SX": "Sextile (60°)",
+            "SQ": "Square (90°)",
+            "TR": "Trine (120°)",
+            "QC": "Quincunx (150°)",
+            "OP": "Opposition (180°)",
+            "--": "No major aspect",
+        },
+        "rows": rows,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Panchanga
 # ---------------------------------------------------------------------------

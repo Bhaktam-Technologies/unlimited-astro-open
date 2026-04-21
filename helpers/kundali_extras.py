@@ -29,6 +29,10 @@ SUN_TO_KETU = [0, 1, 2, 3, 4, 5, 6, 7, 8]
 SUN_TO_KETU_NAMES = ["Sun", "Moon", "Mars", "Mercury", "Jupiter",
                      "Venus", "Saturn", "Rahu", "Ketu"]
 
+# 7 classical planets only (no Rahu/Ketu) for friendship tables
+_7P_IDS  = [0, 1, 2, 3, 4, 5, 6]
+_7P_ABBR = ["SU", "MO", "MA", "ME", "JU", "VE", "SA"]
+
 SIGN_LORDS = [2, 5, 3, 1, 0, 3, 5, 2, 4, 6, 6, 4]
 
 
@@ -42,14 +46,74 @@ SIGN_LORDS = [2, 5, 3, 1, 0, 3, 5, 2, 4, 6, 6, 4]
 #   1 = shatru (enemy)              — natural neutral + temporary enemy
 #   0 = adhi_shatru (great enemy)   — natural enemy + temporary enemy
 # The diagonal is filled with 0 (self-slot) and must be masked separately.
+#
+# Display symbols:
+#   I  = Intimate / Great Friend (adhi_mitra)
+#   F  = Friend (mitra)
+#   N  = Neutral (sama)
+#   E  = Enemy (shatru)
+#   B  = Bitter / Great Enemy (adhi_shatru)
+#   -- = self (diagonal)
 
-_COMPOUND_NAMES = {
-    4: "great_friend",
-    3: "friend",
-    2: "neutral",
-    1: "enemy",
-    0: "great_enemy",
-}
+_COMPOUND_SYMBOL = {4: "I", 3: "F", 2: "N", 1: "E", 0: "B"}
+
+
+def _build_permanent_matrix(natural):
+    rows = []
+    for p in _7P_IDS:
+        nat_friends = set(int(x) for x in natural[p])
+        try:
+            from jhora import const as _c
+            nat_enemies = set(int(x) for x in _c.enemy_planets[p] if int(x) in _7P_IDS)
+        except Exception:
+            nat_enemies = set()
+        cols = {}
+        for p1 in _7P_IDS:
+            abbr = _7P_ABBR[p1]
+            if p == p1:
+                cols[abbr] = "--"
+            elif p1 in nat_friends:
+                cols[abbr] = "F"
+            elif p1 in nat_enemies:
+                cols[abbr] = "E"
+            else:
+                cols[abbr] = "N"
+        rows.append({"planet": _7P_ABBR[p], **cols})
+    return rows
+
+
+def _build_temporary_matrix(temp_friends, temp_enemies):
+    rows = []
+    for p in _7P_IDS:
+        tf = set(int(x) for x in temp_friends.get(p, []) if int(x) in _7P_IDS)
+        te = set(int(x) for x in temp_enemies.get(p, []) if int(x) in _7P_IDS)
+        cols = {}
+        for p1 in _7P_IDS:
+            abbr = _7P_ABBR[p1]
+            if p == p1:
+                cols[abbr] = "--"
+            elif p1 in tf:
+                cols[abbr] = "F"
+            elif p1 in te:
+                cols[abbr] = "E"
+            else:
+                cols[abbr] = "N"
+        rows.append({"planet": _7P_ABBR[p], **cols})
+    return rows
+
+
+def _build_fivefold_matrix(compound):
+    rows = []
+    for p in _7P_IDS:
+        cols = {}
+        for p1 in _7P_IDS:
+            abbr = _7P_ABBR[p1]
+            if p == p1:
+                cols[abbr] = "--"
+            else:
+                cols[abbr] = _COMPOUND_SYMBOL.get(compound[p][p1], "N")
+        rows.append({"planet": _7P_ABBR[p], **cols})
+    return rows
 
 
 def get_friendship(**params):
@@ -57,50 +121,24 @@ def get_friendship(**params):
     rc = charts.rasi_chart(jd, place)
     h_to_p = utils.get_house_planet_list_from_planet_positions(rc)
 
-    natural = house.natural_friends_of_planets()
+    natural      = house.natural_friends_of_planets()
     temp_friends = house._get_temporary_friends_of_planets(h_to_p)
     temp_enemies = house._get_temporary_enemies_of_planets(h_to_p)
-    compound = house._get_compound_relationships_of_planets(h_to_p)
-
-    def _names(ids):
-        return [PLANET_NAMES.get(int(i), str(i)) for i in ids]
-
-    natural_table = {
-        SUN_TO_KETU_NAMES[p]: _names(natural[p]) for p in range(len(natural))
-    }
-    temp_friend_table = {
-        SUN_TO_KETU_NAMES[p]: _names(temp_friends.get(p, [])) for p in SUN_TO_KETU
-    }
-    temp_enemy_table = {
-        SUN_TO_KETU_NAMES[p]: _names(temp_enemies.get(p, [])) for p in SUN_TO_KETU
-    }
-
-
-
-    compound_table = {}
-    for p in SUN_TO_KETU:
-        row = {}
-        for p1 in SUN_TO_KETU:
-            if p == p1:
-                row[SUN_TO_KETU_NAMES[p1]] = "self"
-            else:
-                row[SUN_TO_KETU_NAMES[p1]] = _COMPOUND_NAMES.get(
-                    compound[p][p1], "unknown"
-                )
-        compound_table[SUN_TO_KETU_NAMES[p]] = row
+    compound     = house._get_compound_relationships_of_planets(h_to_p)
 
     return {
+        "columns": _7P_ABBR,
         "legend": {
-            "natural": "Naisargika maitri — fixed friendship from BPHS.",
-            "temporary": "Tatkalika maitri — based on birth chart houses "
-                         "2,3,4,10,11,12 from each planet.",
-            "compound": "Panchadha maitri — merged natural + temporary. "
-                        "Values: great_friend / friend / neutral / enemy / great_enemy.",
+            "F":  "Friend",
+            "I":  "Intimate (Great Friend)",
+            "N":  "Neutral",
+            "E":  "Enemy",
+            "B":  "Bitter (Great Enemy)",
+            "--": "Self",
         },
-        "natural_friends":   natural_table,
-        "temporary_friends": temp_friend_table,
-        "temporary_enemies": temp_enemy_table,
-        "compound":          compound_table,
+        "permanent_friendship": _build_permanent_matrix(natural),
+        "temporary_friendship": _build_temporary_matrix(temp_friends, temp_enemies),
+        "fivefold_friendship":  _build_fivefold_matrix(compound),
     }
 
 

@@ -230,6 +230,26 @@ def jhora_bhava_chart(**p):
         bhava_madhya_method=int(method) if method is not None else None, **p,
     )
 
+@app.route("/jhora/chalit-table", methods=["POST"])
+@endpoint()
+def jhora_chalit_table(**p):
+    body = request.get_json(silent=True) or {}
+    method = body.get("bhaava_madhya_method", body.get("bhava_madhya_method"))
+    return pyjhora_helper.get_chalit_table(
+        bhava_madhya_method=int(method) if method is not None else None, **p,
+    )
+
+
+@app.route("/jhora/bhav-madhya-chart", methods=["POST"])
+@endpoint()
+def jhora_bhav_madhya_chart(**p):
+    body = request.get_json(silent=True) or {}
+    method = body.get("bhaava_madhya_method", body.get("bhava_madhya_method"))
+    return pyjhora_helper.get_bhav_madhya_chart(
+        bhava_madhya_method=int(method) if method is not None else None, **p,
+    )
+
+
 @app.route("/jhora/panchanga", methods=["POST"])
 @endpoint()
 def jhora_panchanga(**p): return pyjhora_helper.get_panchanga(**p)

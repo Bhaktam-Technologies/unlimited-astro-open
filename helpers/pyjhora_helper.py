@@ -805,12 +805,30 @@ def get_kp_chart(**params):
     rc = charts.rasi_chart(jd, place)
     kp = charts.get_KP_lords_from_planet_positions(rc)
 
+    # Build sign-index lookup from rasi chart
+    sign_index_map = {}
+    for entry in rc:
+        label, sign_data = entry[0], entry[1]
+        if isinstance(sign_data, (list, tuple)) and len(sign_data) >= 1:
+            sign_index_map[label] = int(sign_data[0])
+        else:
+            try:
+                sign_index_map[label] = int(sign_data)
+            except (TypeError, ValueError):
+                pass
+
     level_keys = ["kp_number", "star_lord", "sub_lord", "sub_sub_lord",
                   "sub_sub_sub_lord", "sub_sub_sub_sub_lord", "sub_sub_sub_sub_sub_lord"]
     out = {}
     for key, values in kp.items():
         name = _planet_label(key) if key != "L" else "Lagna"
         record = {}
+
+        sign_idx = sign_index_map.get(key)
+        if sign_idx is not None:
+            record["sign"] = _safe_name(SIGN_NAMES, sign_idx, "Sign")
+            record["sign_lord"] = PLANET_NAMES.get(_SIGN_LORDS[sign_idx], None)
+
         for i, v in enumerate(values):
             if i >= len(level_keys):
                 break

@@ -196,6 +196,7 @@ def _format_eclipse_entry(raw):
 
 
 
+
 def _gregorian_to_jd_forward(date_tuple, place):
     """Convert (y, m, d, hour) + place tz to JD (UT)."""
     import swisseph as swe

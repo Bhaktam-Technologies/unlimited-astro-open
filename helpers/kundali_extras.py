@@ -75,6 +75,8 @@ def get_friendship(**params):
         SUN_TO_KETU_NAMES[p]: _names(temp_enemies.get(p, [])) for p in SUN_TO_KETU
     }
 
+
+
     compound_table = {}
     for p in SUN_TO_KETU:
         row = {}

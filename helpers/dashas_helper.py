@@ -13,6 +13,7 @@ This module flattens them into a registry so callers can use one endpoint
 with `{"dasha": "narayana", ...}` instead of hand-wiring 40+ URLs.
 """
 
+
 from jhora import const
 from jhora.horoscope.dhasa.graha import (
     vimsottari, ashtottari, yogini, tithi_ashtottari, tithi_yogini,

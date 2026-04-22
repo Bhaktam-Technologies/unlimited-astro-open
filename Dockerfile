@@ -11,9 +11,11 @@ ENV PATH=/opt/conda/envs/env_astro_open/bin:$PATH
 RUN echo "source activate env_astro_open" >> ~/.bashrc
 RUN pip install --no-cache-dir -r requirements.txt
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates \
-      && EPHE_DIR=$(python -c "import os, jhora; print(os.path.join(os.path.dirname(jhora.__file__),'data','ephe'))") \
       && git clone --depth 1 https://github.com/naturalstupid/pyjhora /tmp/pyjhora \
-      && cp /tmp/pyjhora/src/jhora/data/ephe/* "$EPHE_DIR/" \
+      && EPHE_DIR=$(find /opt/conda/envs/env_astro_open/lib -type d -path '*/jhora/data/ephe' | head -n1) \
+      && echo "Installing ephemeris to $EPHE_DIR" \
+      && cp /tmp/pyjhora/src/jhora/data/ephe/*.se1 "$EPHE_DIR/" \
+      && cp /tmp/pyjhora/src/jhora/data/ephe/*.txt "$EPHE_DIR/" \
       && rm -rf /tmp/pyjhora /var/lib/apt/lists/*
 
 COPY astro_open_processor.py wsgi.py start.sh ./

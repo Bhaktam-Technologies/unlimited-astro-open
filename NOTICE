@@ -1,4 +1,4 @@
-unlimited-astro-open
+astro-wrapper
 Copyright (C) 2026 Bhaktam Technologies
 
 This program is free software: you can redistribute it and/or modify
@@ -44,4 +44,4 @@ users interact with it there, your server must also allow those users to
 receive the Corresponding Source of the modified version. The canonical
 Corresponding Source for this project is published at:
 
-    https://github.com/ketanbhaktam/unlimited-astro-open
+    https://github.com/Bhaktam-Technologies/astro-wrapper

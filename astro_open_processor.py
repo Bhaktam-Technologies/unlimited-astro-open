@@ -1,4 +1,4 @@
-# unlimited-astro-open — Copyright (C) 2026 Bhaktam Technologies
+# astro-wrapper — Copyright (C) 2026 Bhaktam Technologies
 # Licensed under the GNU Affero General Public License v3.0 or later.
 # See LICENSE and NOTICE in the project root for full terms.
 
@@ -37,7 +37,7 @@ app = Flask(__name__)
 app_logger = logger_mod.getLoggerForApp()
 
 SERVICE_VERSION = "1.0.0"
-SERVICE_NAME = "unlimited-astro-open"
+SERVICE_NAME = "astro-wrapper"
 
 
 def _truthy(v):
@@ -161,7 +161,7 @@ def source():
     return jsonify({
         "project": SERVICE_NAME,
         "license": "AGPL-3.0-or-later",
-        "source": "https://github.com/Bhaktam-Technologies/unlimited-astro-open",
+        "source": "https://github.com/Bhaktam-Technologies/astro-wrapper",
         "notice": "This service is offered under the GNU Affero General Public License v3.0. "
                   "You may obtain the Corresponding Source at the URL above."
     })

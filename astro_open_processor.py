@@ -269,6 +269,11 @@ def jhora_bhava_bala(**p): return pyjhora_helper.get_bhava_bala(**p)
 
 
 
+@app.route("/jhora/retrograde-combustion", methods=["POST"])
+@endpoint()
+def jhora_retrograde_combustion(**p): return advanced_helper.get_retrograde_combustion(**p)
+
+
 @app.route("/jhora/graha-yudh", methods=["POST"])
 @endpoint()
 def jhora_graha_yudh(**p): return advanced_helper.get_graha_yudh(**p)

@@ -222,7 +222,7 @@ def _format_planet_position(entry):
         "planet": _planet_label(label),
         "planet_id": label if label != "L" else "L",
         "sign": _safe_name(SIGN_NAMES, sign_idx_int, "Sign"),
-        "sign_number": sign_idx_int,
+        "sign_number": sign_idx_int + 1,
         "sign_lord": PLANET_NAMES.get(_SIGN_LORDS[sign_idx_int], None),
         "degrees": round(degrees_f, 4),
         "nakshatra": nak_name,

@@ -273,6 +273,17 @@ _SPHUTA_FUNCS = [
 # Graha Yudh & Marana Karaka Sthana
 # ---------------------------------------------------------------------------
 
+def get_retrograde_combustion(**params):
+    place, dob, tob, jd, rc = _rasi_chart_objects(**params)
+    retro_indices = drik.planets_in_retrograde(jd, place)
+    planet_positions = charts.divisional_chart(jd, place)
+    combust_indices = charts.planets_in_combustion(planet_positions)
+    return {
+        "retrograde": [_planet_label(p) for p in retro_indices],
+        "combustion": [_planet_label(p) for p in combust_indices],
+    }
+
+
 def get_graha_yudh(**params):
     place, dob, tob, jd, rc = _rasi_chart_objects(**params)
     try:

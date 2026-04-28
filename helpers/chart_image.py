@@ -3,26 +3,30 @@
 # See LICENSE and NOTICE in the project root for full terms.
 
 """
-South Indian style Vedic astrology chart renderer using Pillow.
+Vedic astrology chart renderer (North Indian & South Indian styles) using Pillow.
 Generates PNG images from rasi_chart data returned by pyjhora_helper.
 """
 import io
 from PIL import Image, ImageDraw, ImageFont
 
 # ---------------------------------------------------------------------------
-# Sign layout for South Indian chart (fixed positions, 4x4 grid)
-# The outer 12 cells of a 4x4 grid, each mapped to a rasi (0-based):
+# Sign layout for South Indian chart (fixed sign positions, 4x4 grid)
 #   Pisces(11)  Aries(0)     Taurus(1)    Gemini(2)
 #   Aquarius(10)                          Cancer(3)
 #   Capricorn(9)                          Leo(4)
 #   Sagittarius(8) Scorpio(7) Libra(6)   Virgo(5)
+# sign_index is 0-based internally; sign_number in chart_data is 1-based.
 # ---------------------------------------------------------------------------
 SIGN_NAMES_SHORT = [
     "Ari", "Tau", "Gem", "Can", "Leo", "Vir",
     "Lib", "Sco", "Sag", "Cap", "Aqu", "Pis"
 ]
+SIGN_NAMES_FULL = [
+    "Aries", "Taurus", "Gemini", "Cancer", "Leo", "Virgo",
+    "Libra", "Scorpio", "Sagittarius", "Capricorn", "Aquarius", "Pisces"
+]
 
-# (row, col) position for each rasi index 0-11 in the 4x4 grid
+# (row, col) in 4x4 grid for each 0-based sign index
 SOUTH_INDIAN_POSITIONS = {
     0: (0, 1),   # Aries
     1: (0, 2),   # Taurus
@@ -56,35 +60,38 @@ PLANET_ABBR = {
 
 
 def _group_planets_by_sign(chart_data, label_mode="degrees"):
-    """Group planet names by sign_number from rasi_chart output.
+    """Group planet labels by 0-based sign index.
+
+    sign_number in chart_data is 1-based (1=Aries … 12=Pisces);
+    we convert to 0-based for use as a dict key so callers can look up
+    by the same 0-based index used in SOUTH_INDIAN_POSITIONS.
 
     label_mode:
-      * "degrees"     → "Su 29°"         (default)
-      * "sign_number" → "Su 7"           (1-based rashi number)
+      * "degrees"     → "Su 29°"   (default)
+      * "sign_number" → "Su 7"     (1-based rashi number)
       * "both"        → "Su 7 · 29°"
       * "none"        → "Su"
     """
     houses = {}
     for entry in chart_data:
-        sign_num = entry["sign_number"]
+        sign_num_1based = int(entry["sign_number"])          # 1-based from API
+        sign_idx = sign_num_1based - 1                       # 0-based for grid lookup
         planet = entry["planet"]
         abbr = PLANET_ABBR.get(planet, planet[:2])
         deg = entry.get("degrees", 0)
-        sign_one_based = int(sign_num) + 1
         if label_mode == "sign_number":
-            label = f"{abbr} {sign_one_based}"
+            label = f"{abbr} {sign_num_1based}"
         elif label_mode == "both":
-            label = f"{abbr} {sign_one_based} · {deg:.0f}\u00b0"
+            label = f"{abbr} {sign_num_1based} · {deg:.0f}\u00b0"
         elif label_mode == "none":
             label = abbr
         else:
             label = f"{abbr} {deg:.0f}\u00b0"
-        houses.setdefault(sign_num, []).append(label)
+        houses.setdefault(sign_idx, []).append(label)
     return houses
 
 
 def _try_load_font(size):
-    """Try to load a good font, fall back to default."""
     font_paths = [
         "/System/Library/Fonts/Helvetica.ttc",
         "/System/Library/Fonts/SFNSMono.ttf",
@@ -99,20 +106,13 @@ def _try_load_font(size):
     return ImageFont.load_default()
 
 
+# ---------------------------------------------------------------------------
+# South Indian chart
+# ---------------------------------------------------------------------------
+
 def generate_south_indian_chart(chart_data, title="Rasi Chart", size=600,
                                 label_mode="degrees"):
-    """
-    Generate a South Indian style chart image.
-
-    Args:
-        chart_data: list of dicts from pyjhora_helper.get_rasi_chart()
-        title: chart title text
-        size: image width/height in pixels
-        label_mode: "degrees" | "sign_number" | "both" | "none"
-
-    Returns:
-        bytes (PNG image)
-    """
+    """South Indian style: signs are fixed in cells, planets/lagna move."""
     margin = 40
     title_height = 50
     img_w = size
@@ -127,12 +127,10 @@ def generate_south_indian_chart(chart_data, title="Rasi Chart", size=600,
     sign_font = _try_load_font(11)
     planet_font = _try_load_font(10)
 
-    # Title
     bbox = draw.textbbox((0, 0), title, font=title_font)
     tw = bbox[2] - bbox[0]
     draw.text(((img_w - tw) // 2, 10), title, fill="black", font=title_font)
 
-    # Draw the 4x4 grid lines
     ox, oy = margin, margin + title_height
     for r in range(5):
         y = oy + r * cell_h
@@ -141,37 +139,176 @@ def generate_south_indian_chart(chart_data, title="Rasi Chart", size=600,
         x = ox + c * cell_w
         draw.line([(x, oy), (x, oy + 4 * cell_h)], fill="black", width=2)
 
-    # Draw diagonal lines in the center 2x2 block
     cx1, cy1 = ox + cell_w, oy + cell_h
     cx2, cy2 = ox + 3 * cell_w, oy + 3 * cell_h
     draw.line([(cx1, cy1), (cx2, cy2)], fill="black", width=1)
     draw.line([(cx2, cy1), (cx1, cy2)], fill="black", width=1)
 
-    # Group planets by sign
     houses = _group_planets_by_sign(chart_data, label_mode=label_mode)
 
-    # Fill each cell
     for sign_idx in range(12):
         row, col = SOUTH_INDIAN_POSITIONS[sign_idx]
         x = ox + col * cell_w
         y = oy + row * cell_h
 
-        # Sign name (top-left of cell)
         draw.text((x + 3, y + 2), SIGN_NAMES_SHORT[sign_idx], fill="red", font=sign_font)
 
-        # Planets in this sign
         planets = houses.get(sign_idx, [])
         py = y + 16
         for p_label in planets:
             draw.text((x + 3, py), p_label, fill="darkblue", font=planet_font)
             py += 13
 
-    # Return as PNG bytes
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     buf.seek(0)
     return buf.getvalue()
 
+
+# ---------------------------------------------------------------------------
+# North Indian chart
+# ---------------------------------------------------------------------------
+# Construction: outer square + both full diagonals (TL→BR, TR→BL) +
+# inner diamond (connecting midpoints T, R, B, L of each side).
+# The diagonals intersect the diamond sides at P1..P4, creating 12 regions:
+#   4 inner quadrilaterals  → H1 (bottom), H4 (right), H7 (top), H10 (left)
+#   8 corner triangles (2 per corner) → H2–H3, H5–H6, H8–H9, H11–H12
+# Houses go clockwise from H1. Signs rotate; Lagna sign goes in H1.
+# ---------------------------------------------------------------------------
+
+def _centroid(pts):
+    xs = [p[0] for p in pts]
+    ys = [p[1] for p in pts]
+    return sum(xs) / len(xs), sum(ys) / len(ys)
+
+
+def generate_north_indian_chart(chart_data, title="Rasi Chart", size=600,
+                                label_mode="degrees"):
+    """North Indian (Uttara Bharatiya) style: houses are fixed, signs rotate."""
+    margin = 40
+    title_height = 50
+    S = size - 2 * margin        # chart square side length
+    img_w = size
+    img_h = size + title_height
+
+    img = Image.new("RGB", (img_w, img_h), "white")
+    draw = ImageDraw.Draw(img)
+
+    title_font  = _try_load_font(18)
+    sign_font   = _try_load_font(10)
+    planet_font = _try_load_font(10)
+
+    bbox = draw.textbbox((0, 0), title, font=title_font)
+    tw = bbox[2] - bbox[0]
+    draw.text(((img_w - tw) // 2, 10), title, fill="black", font=title_font)
+
+    ox = margin
+    oy = margin + title_height
+
+    # Named key points (integer coords)
+    def pt(rx, ry):   # rx, ry in [0,1] relative to chart square
+        return (ox + int(rx * S), oy + int(ry * S))
+
+    TL = pt(0,   0);   TR = pt(1,   0)
+    BR = pt(1,   1);   BL = pt(0,   1)
+    T  = pt(.5,  0);   R  = pt(1,  .5)
+    B  = pt(.5,  1);   L  = pt(0,  .5)
+    C  = pt(.5,  .5)
+    P1 = pt(.25, .25); P2 = pt(.75, .25)
+    P3 = pt(.75, .75); P4 = pt(.25, .75)
+
+    # 12 house polygons — clockwise from H1 (bottom inner)
+    house_polys = {
+        1:  [C, P3, B, P4],
+        2:  [BR, P3, B],
+        3:  [BR, R, P3],
+        4:  [C, P2, R, P3],
+        5:  [TR, P2, R],
+        6:  [TR, T, P2],
+        7:  [C, P1, T, P2],
+        8:  [TL, T, P1],
+        9:  [TL, P1, L],
+        10: [C, P4, L, P1],
+        11: [BL, P4, L],
+        12: [BL, B, P4],
+    }
+
+    # Find Lagna sign (1-based)
+    lagna_sign = 1
+    for entry in chart_data:
+        if entry.get("planet") == "Lagna" or entry.get("planet_id") == "L":
+            lagna_sign = int(entry["sign_number"])
+            break
+
+    # house_sign[h] = 0-based sign index for house h
+    house_sign = {h: (lagna_sign - 1 + h - 1) % 12 for h in range(1, 13)}
+
+    # Group planet labels by house
+    house_planets = {h: [] for h in range(1, 13)}
+    sign_to_house = {si: h for h, si in house_sign.items()}
+    for entry in chart_data:
+        if entry.get("planet") == "Lagna":
+            continue
+        sign_idx = int(entry["sign_number"]) - 1
+        abbr = PLANET_ABBR.get(entry["planet"], entry["planet"][:2])
+        deg  = entry.get("degrees", 0)
+        if label_mode == "sign_number":
+            label = f"{abbr} {sign_idx + 1}"
+        elif label_mode == "both":
+            label = f"{abbr} {sign_idx+1}·{deg:.0f}°"
+        elif label_mode == "none":
+            label = abbr
+        else:
+            label = f"{abbr} {deg:.0f}°"
+        h = sign_to_house.get(sign_idx)
+        if h:
+            house_planets[h].append(label)
+
+    # --- Draw chart lines ---
+    # Outer border
+    draw.rectangle([ox, oy, ox + S, oy + S], outline="black", width=2)
+    # Inner diamond sides
+    line_color = (160, 80, 0)   # dark amber, similar to AstroSage dashed lines
+    draw.line([T, R], fill=line_color, width=1)
+    draw.line([R, B], fill=line_color, width=1)
+    draw.line([B, L], fill=line_color, width=1)
+    draw.line([L, T], fill=line_color, width=1)
+    # Full diagonals (TL→BR and TR→BL)
+    draw.line([TL, BR], fill=line_color, width=1)
+    draw.line([TR, BL], fill=line_color, width=1)
+
+    # --- Fill each house cell with sign + planets ---
+    for h, pts in house_polys.items():
+        sign_idx   = house_sign[h]
+        sign_short = SIGN_NAMES_SHORT[sign_idx]
+        cx_c, cy_c = _centroid(pts)
+
+        # Sign abbreviation (red, small)
+        sbbox = draw.textbbox((0, 0), sign_short, font=sign_font)
+        sw = sbbox[2] - sbbox[0]
+        sh = sbbox[3] - sbbox[1]
+
+        planets = house_planets[h]
+        block_h = sh + len(planets) * 13
+        top_y   = cy_c - block_h / 2
+
+        draw.text((cx_c - sw / 2, top_y), sign_short, fill="darkred", font=sign_font)
+        py = top_y + sh + 2
+        for p_label in planets:
+            pbbox = draw.textbbox((0, 0), p_label, font=planet_font)
+            pw = pbbox[2] - pbbox[0]
+            draw.text((cx_c - pw / 2, py), p_label, fill="darkblue", font=planet_font)
+            py += 13
+
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+    return buf.getvalue()
+
+
+# ---------------------------------------------------------------------------
+# Bhava / Chalit chart (South Indian style)
+# ---------------------------------------------------------------------------
 
 def generate_bhava_chart(bhava_data, title="Bhava / Chalit Chart", size=600,
                          label_mode="house"):
@@ -188,12 +325,8 @@ def generate_bhava_chart(bhava_data, title="Bhava / Chalit Chart", size=600,
     if not houses_list:
         raise ValueError("bhava_data has no 'houses' entries to render")
 
-    sign_name_to_idx = {n: i for i, n in enumerate(
-        ["Aries", "Taurus", "Gemini", "Cancer", "Leo", "Virgo",
-         "Libra", "Scorpio", "Sagittarius", "Capricorn", "Aquarius", "Pisces"]
-    )}
+    sign_name_to_idx = {n: i for i, n in enumerate(SIGN_NAMES_FULL)}
 
-    # Build a cell dict keyed by sign index.
     cells = {i: {"house": None, "planets": [], "cusp_mid": None} for i in range(12)}
     for h in houses_list:
         sign_idx = sign_name_to_idx.get(h.get("sign"))
@@ -221,12 +354,10 @@ def generate_bhava_chart(bhava_data, title="Bhava / Chalit Chart", size=600,
     house_font = _try_load_font(14)
     planet_font = _try_load_font(11)
 
-    # Title
     bbox = draw.textbbox((0, 0), title, font=title_font)
     tw = bbox[2] - bbox[0]
     draw.text(((img_w - tw) // 2, 10), title, fill="black", font=title_font)
 
-    # Grid
     ox, oy = margin, margin + title_height
     for r in range(5):
         y = oy + r * cell_h
@@ -269,20 +400,28 @@ def generate_bhava_chart(bhava_data, title="Bhava / Chalit Chart", size=600,
     return buf.getvalue()
 
 
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
+
 def generate_chart_image(chart_data, chart_name="Rasi Chart", size=600,
-                         label_mode="degrees"):
-    """
-    Public API: generate chart image bytes from chart data.
+                         label_mode="degrees", style="north"):
+    """Generate chart image bytes.
 
     Args:
         chart_data: list from pyjhora_helper.get_rasi_chart() or any divisional chart
         chart_name: title for the chart
         size: image size in pixels
         label_mode: "degrees" | "sign_number" | "both" | "none"
+        style: "north" (default) | "south"
 
     Returns:
         PNG image as bytes
     """
-    return generate_south_indian_chart(
+    if style == "south":
+        return generate_south_indian_chart(
+            chart_data, title=chart_name, size=size, label_mode=label_mode,
+        )
+    return generate_north_indian_chart(
         chart_data, title=chart_name, size=size, label_mode=label_mode,
     )

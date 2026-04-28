@@ -333,6 +333,7 @@ def jhora_chart_image():
         chart_type = body.get("chart_type", "D1_Rasi")
         size = int(body.get("size", 600))
         label_mode = str(body.get("label_mode", "degrees")).lower()
+        style = str(body.get("style", "north")).lower()
 
         # Bhava/Chalit takes a separate renderer and its own label_mode vocabulary.
         if chart_type in {"Bhava", "Chalit", "bhava", "chalit"}:
@@ -372,7 +373,7 @@ def jhora_chart_image():
             title = chart_type.replace("_", " ")
 
         png_bytes = chart_image.generate_chart_image(
-            data, chart_name=title, size=size, label_mode=label_mode,
+            data, chart_name=title, size=size, label_mode=label_mode, style=style,
         )
         return send_file(io.BytesIO(png_bytes),
                          mimetype="image/png",

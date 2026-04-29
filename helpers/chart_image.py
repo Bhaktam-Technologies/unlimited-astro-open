@@ -311,8 +311,8 @@ def generate_north_indian_chart(chart_data, title="Rasi Chart", size=600,
 # ---------------------------------------------------------------------------
 
 def generate_bhava_chart(bhava_data, title="Bhava / Chalit Chart", size=600,
-                         label_mode="house"):
-    """Render a bhava (chalit) chart: each cell shows sign + house # + planets.
+                         label_mode="house", style="north"):
+    """Render a bhava (chalit) chart in North or South Indian style.
 
     bhava_data: dict with 'houses' key — list of
       {house, sign, cusp_start, cusp_mid, cusp_end, planets, planet_ids}
@@ -320,6 +320,9 @@ def generate_bhava_chart(bhava_data, title="Bhava / Chalit Chart", size=600,
       * "house"      → shows "H9" + planets          (default)
       * "cusp"       → shows "H9 · 283°" (cusp mid)
       * "none"       → just planets, no house prefix
+    style:
+      * "north"      → North Indian diamond layout    (default)
+      * "south"      → South Indian fixed-sign grid
     """
     houses_list = bhava_data.get("houses") if isinstance(bhava_data, dict) else bhava_data
     if not houses_list:
@@ -327,6 +330,7 @@ def generate_bhava_chart(bhava_data, title="Bhava / Chalit Chart", size=600,
 
     sign_name_to_idx = {n: i for i, n in enumerate(SIGN_NAMES_FULL)}
 
+    # Build per-sign-cell data: house number(s), planets, cusp_mid
     cells = {i: {"house": None, "planets": [], "cusp_mid": None} for i in range(12)}
     for h in houses_list:
         sign_idx = sign_name_to_idx.get(h.get("sign"))
@@ -339,6 +343,13 @@ def generate_bhava_chart(bhava_data, title="Bhava / Chalit Chart", size=600,
         for p in h.get("planets", []):
             cell["planets"].append(PLANET_ABBR.get(p, p[:2]))
 
+    if style == "south":
+        return _bhava_south(cells, title=title, size=size, label_mode=label_mode)
+    return _bhava_north(cells, houses_list, title=title, size=size, label_mode=label_mode)
+
+
+def _bhava_south(cells, title="Bhava / Chalit Chart", size=600, label_mode="house"):
+    """South Indian fixed-sign grid for the bhava chart."""
     margin = 40
     title_height = 50
     img_w = size
@@ -349,9 +360,9 @@ def generate_bhava_chart(bhava_data, title="Bhava / Chalit Chart", size=600,
     img = Image.new("RGB", (img_w, img_h), "white")
     draw = ImageDraw.Draw(img)
 
-    title_font = _try_load_font(18)
-    sign_font = _try_load_font(11)
-    house_font = _try_load_font(14)
+    title_font  = _try_load_font(18)
+    sign_font   = _try_load_font(11)
+    house_font  = _try_load_font(14)
     planet_font = _try_load_font(11)
 
     bbox = draw.textbbox((0, 0), title, font=title_font)
@@ -393,6 +404,143 @@ def generate_bhava_chart(bhava_data, title="Bhava / Chalit Chart", size=600,
         for p_abbr in cell["planets"]:
             draw.text((x + 3, py), p_abbr, fill="darkblue", font=planet_font)
             py += 14
+
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+    return buf.getvalue()
+
+
+def _bhava_north(cells, houses_list, title="Bhava / Chalit Chart", size=600,
+                 label_mode="house"):
+    """North Indian diamond layout for the bhava chart.
+
+    Houses are fixed in the 12 diamond regions (same geometry as generate_north_indian_chart).
+    The Bhava-1 house determines which sign goes in region H1; subsequent signs follow
+    clockwise — identical rotation logic to the rasi North Indian renderer.
+    """
+    margin = 40
+    title_height = 50
+    S = size - 2 * margin
+    img_w = size
+    img_h = size + title_height
+
+    img = Image.new("RGB", (img_w, img_h), "white")
+    draw = ImageDraw.Draw(img)
+
+    title_font  = _try_load_font(18)
+    sign_font   = _try_load_font(10)
+    house_font  = _try_load_font(10)
+    planet_font = _try_load_font(10)
+
+    bbox = draw.textbbox((0, 0), title, font=title_font)
+    tw = bbox[2] - bbox[0]
+    draw.text(((img_w - tw) // 2, 10), title, fill="black", font=title_font)
+
+    ox = margin
+    oy = margin + title_height
+
+    def pt(rx, ry):
+        return (ox + int(rx * S), oy + int(ry * S))
+
+    TL = pt(0,   0);   TR = pt(1,   0)
+    BR = pt(1,   1);   BL = pt(0,   1)
+    T  = pt(.5,  0);   R  = pt(1,  .5)
+    B  = pt(.5,  1);   L  = pt(0,  .5)
+    C  = pt(.5,  .5)
+    P1 = pt(.25, .25); P2 = pt(.75, .25)
+    P3 = pt(.75, .75); P4 = pt(.25, .75)
+
+    house_polys = {
+        1:  [C, P3, B, P4],
+        2:  [BR, P3, B],
+        3:  [BR, R, P3],
+        4:  [C, P2, R, P3],
+        5:  [TR, P2, R],
+        6:  [TR, T, P2],
+        7:  [C, P1, T, P2],
+        8:  [TL, T, P1],
+        9:  [TL, P1, L],
+        10: [C, P4, L, P1],
+        11: [BL, P4, L],
+        12: [BL, B, P4],
+    }
+
+    # Determine lagna sign from bhava-1 entry
+    lagna_sign_1based = 1
+    for h in houses_list:
+        if int(h.get("house", 0)) == 1:
+            sign_name = h.get("sign", "")
+            if sign_name in SIGN_NAMES_FULL:
+                lagna_sign_1based = SIGN_NAMES_FULL.index(sign_name) + 1
+            else:
+                cusp = float(h.get("cusp_start", 0))
+                lagna_sign_1based = int(cusp // 30) % 12 + 1
+            break
+
+    # house_sign[h] = 0-based sign index placed in diamond region h
+    house_sign = {h: (lagna_sign_1based - 1 + h - 1) % 12 for h in range(1, 13)}
+    sign_to_region = {si: h for h, si in house_sign.items()}
+
+    # Build per-region data from cells (keyed by sign index)
+    region_data = {h: {"sign_idx": house_sign[h], "house_label": None,
+                       "planets": [], "cusp_mid": None}
+                   for h in range(1, 13)}
+    for sign_idx, cell in cells.items():
+        region = sign_to_region.get(sign_idx)
+        if region is None:
+            continue
+        rd = region_data[region]
+        rd["house_label"] = cell["house"]
+        rd["planets"] = cell["planets"]
+        rd["cusp_mid"] = cell["cusp_mid"]
+
+    # --- Draw chart lines ---
+    draw.rectangle([ox, oy, ox + S, oy + S], outline="black", width=2)
+    line_color = (160, 80, 0)
+    draw.line([T, R], fill=line_color, width=1)
+    draw.line([R, B], fill=line_color, width=1)
+    draw.line([B, L], fill=line_color, width=1)
+    draw.line([L, T], fill=line_color, width=1)
+    draw.line([TL, BR], fill=line_color, width=1)
+    draw.line([TR, BL], fill=line_color, width=1)
+
+    # --- Fill each region ---
+    for region, pts in house_polys.items():
+        rd = region_data[region]
+        sign_short = SIGN_NAMES_SHORT[rd["sign_idx"]]
+        cx_c, cy_c = _centroid(pts)
+
+        # Build label lines: [sign, house_label, ...planets]
+        lines = []
+
+        # House label (e.g. "H3") in darkgreen
+        if rd["house_label"] is not None and label_mode != "none":
+            if label_mode == "cusp" and rd["cusp_mid"] is not None:
+                hlabel = f"H{rd['house_label']} \u00b7 {float(rd['cusp_mid']):.0f}\u00b0"
+            else:
+                hlabel = f"H{rd['house_label']}"
+            lines.append(("house", hlabel))
+
+        # Sign abbr in darkred
+        lines.append(("sign", sign_short))
+
+        # Planets in darkblue
+        for p in rd["planets"]:
+            lines.append(("planet", p))
+
+        total_h = len(lines) * 13
+        top_y = cy_c - total_h / 2
+
+        color_map = {"house": "darkgreen", "sign": "darkred", "planet": "darkblue"}
+        font_map  = {"house": house_font,  "sign": sign_font,  "planet": planet_font}
+
+        for kind, text in lines:
+            f = font_map[kind]
+            bb = draw.textbbox((0, 0), text, font=f)
+            tw2 = bb[2] - bb[0]
+            draw.text((cx_c - tw2 / 2, top_y), text, fill=color_map[kind], font=f)
+            top_y += 13
 
     buf = io.BytesIO()
     img.save(buf, format="PNG")

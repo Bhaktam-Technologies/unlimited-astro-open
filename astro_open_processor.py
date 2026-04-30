@@ -250,6 +250,11 @@ def jhora_bhav_madhya_chart(**p):
     )
 
 
+@app.route("/jhora/moon", methods=["POST"])
+@endpoint()
+def jhora_moon(**p): return pyjhora_helper.get_moon_data(**p)
+
+
 @app.route("/jhora/panchanga", methods=["POST"])
 @endpoint()
 def jhora_panchanga(**p): return pyjhora_helper.get_panchanga(**p)
@@ -329,11 +334,27 @@ def jhora_chart_image():
         session_cfg = extract_session_config(body)
         if session_cfg:
             jhora_config.set_session_config(**session_cfg)
-        params = extract_birth_params(body)
         chart_type = body.get("chart_type", "D1_Rasi")
         size = int(body.get("size", 600))
         label_mode = str(body.get("label_mode", "degrees")).lower()
         style = str(body.get("style", "north")).lower()
+
+        # Accept pre-computed planets array (e.g. from /jhora/moon)
+        planets_input = body.get("planets")
+        if planets_input is not None:
+            if not isinstance(planets_input, list):
+                return _err("'planets' must be an array")
+            if label_mode not in {"degrees", "sign_number", "both", "none"}:
+                label_mode = "sign_number"
+            png_bytes = chart_image.generate_chart_image(
+                planets_input, chart_name=body.get("title", "Moon Chart"),
+                size=size, label_mode=label_mode, style=style,
+            )
+            return send_file(io.BytesIO(png_bytes),
+                             mimetype="image/png",
+                             download_name="moon_chart.png")
+
+        params = extract_birth_params(body)
 
         # Bhava/Chalit takes a separate renderer and its own label_mode vocabulary.
         if chart_type in {"Bhava", "Chalit", "bhava", "chalit"}:

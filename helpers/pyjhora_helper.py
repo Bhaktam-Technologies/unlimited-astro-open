@@ -345,6 +345,83 @@ def get_mixed_chart(varga_factor_1, varga_factor_2,
     return [_format_planet_position(e) for e in result]
 
 
+def get_moon_data(**params):
+    place, dob, tob, jd = _build_inputs(**params)
+    rc = charts.rasi_chart(jd, place)
+
+    moon_entry = next((e for e in rc if e[0] == 1), None)
+    if moon_entry is None:
+        raise RuntimeError("Moon position not found in rasi chart")
+
+    moon_pos = _format_planet_position(moon_entry)
+
+    sign_idx = int(moon_entry[1][0])
+    deg = float(moon_entry[1][1])
+    absolute_lon = sign_idx * 30.0 + deg
+
+    tit = drik.tithi(jd, place)
+    tithi_num = int(tit[0])
+    tithi_name_idx = (tithi_num - 1) % 30
+
+    mr = drik.moonrise(jd, place)
+    ms = drik.moonset(jd, place)
+
+    moonrise_hours = float(mr[0]) if mr else None
+    moonset_hours = float(ms[0]) if ms else None
+
+    planets = []
+    for entry in rc:
+        label = entry[0]
+        if label == "L":
+            continue
+        sign_data = entry[1]
+        if isinstance(sign_data, (list, tuple)) and len(sign_data) >= 2:
+            s_idx = int(sign_data[0])
+        else:
+            s_idx = int(sign_data)
+        planets.append({
+            "planet": PLANET_NAMES.get(label, str(label)),
+            "planet_id": label,
+            "sign": _safe_name(SIGN_NAMES, s_idx, "Sign"),
+            "sign_number": s_idx + 1,
+        })
+
+    return {
+        "planets": planets,
+        "position": {
+            "planet": "Moon",
+            "planet_id": 1,
+            "sign": moon_pos["sign"],
+            "sign_number": moon_pos["sign_number"],
+            "sign_lord": moon_pos["sign_lord"],
+            "degrees": moon_pos["degrees"],
+            "absolute_longitude": round(absolute_lon, 4),
+            "nakshatra": moon_pos["nakshatra"],
+            "nakshatra_number": moon_pos["nakshatra_number"],
+            "nakshatra_pada": moon_pos["nakshatra_pada"],
+            "nakshatra_lord": moon_pos["nakshatra_lord"],
+            "relationship": moon_pos["relationship"],
+        },
+        "phase": {
+            "tithi_number": tithi_num,
+            "tithi_name": _safe_name(TITHI_NAMES, tithi_name_idx, "Tithi"),
+            "paksha": "Shukla" if tithi_num <= 15 else "Krishna",
+            **_duration_struct(
+                tit[1] if len(tit) > 1 else None,
+                tit[2] if len(tit) > 2 else None,
+            ),
+        },
+        "moonrise": {
+            "hours": moonrise_hours,
+            "time": _to_hms(moonrise_hours),
+        },
+        "moonset": {
+            "hours": moonset_hours,
+            "time": _to_hms(moonset_hours),
+        },
+    }
+
+
 def get_bhava_chart(bhava_madhya_method=None, **params):
     place, dob, tob, jd = _build_inputs(**params)
     method = int(bhava_madhya_method) if bhava_madhya_method is not None else const.bhaava_madhya_method

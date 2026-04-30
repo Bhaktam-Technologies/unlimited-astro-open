@@ -383,7 +383,10 @@ def jhora_chart_image():
                 "degrees, sign_number, both, none"
             )
 
-        if chart_type == "D1_Rasi":
+        if chart_type in {"Moon", "moon"}:
+            data = pyjhora_helper.get_moon_data(**params)["planets"]
+            title = "Moon Chart"
+        elif chart_type == "D1_Rasi":
             data = pyjhora_helper.get_rasi_chart(**params)
             title = "Rasi Chart (D1)"
         else:

@@ -14,6 +14,7 @@ strengths and match. Fixes the old helper's bugs:
 import swisseph as swe
 import functools
 from collections import OrderedDict
+from datetime import datetime, timezone, timedelta
 
 from jhora import const, utils
 from jhora.panchanga import drik
@@ -1115,8 +1116,11 @@ def _compute_vimshottari_dasha(jd, place):
 
 def get_vimshottari_dasha(**params):
     """Return Mahadasha hierarchy nested 5 levels deep (Maha→Antar→Pratyantar→Sooksham→Pran)."""
+    ist_now = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S IST")
+    print(f"[vimshottari-dasha] [{ist_now}] request params:", params)
     place, dob, tob, jd = _build_inputs(**params)
-    return _compute_vimshottari_dasha(jd, place)
+    result = _compute_vimshottari_dasha(jd, place)
+    return result
 
 
 def get_yogini_dasa(**params):

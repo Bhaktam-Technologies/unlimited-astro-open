@@ -60,15 +60,14 @@ def init_pyjhora_defaults():
 
 def set_session_config(ayanamsa_mode=None, use_true_nodes=None, language=None,
                        bhaava_madhya_method=None):
-    """Per-request override. Returns the applied config for the response."""
-    if ayanamsa_mode:
-        mode = ayanamsa_mode.upper()
-        if mode not in AVAILABLE_AYANAMSAS:
-            raise ValueError(
-                f"Unknown ayanamsa '{ayanamsa_mode}'. "
-                f"Available: {sorted(AVAILABLE_AYANAMSAS)}"
-            )
-        _apply_ayanamsa(mode)
+    """Per-request override. Returns the applied config for the response.
+
+    Ayanamsa is locked to LAHIRI and cannot be overridden per-request.
+    The `ayanamsa_mode` argument is accepted for backward compatibility
+    but ignored — `init_pyjhora_defaults()` runs on every request and
+    enforces LAHIRI.
+    """
+    _ = ayanamsa_mode
 
     if use_true_nodes is not None:
         const._use_true_nodes_for_rahu_ketu = bool(use_true_nodes)

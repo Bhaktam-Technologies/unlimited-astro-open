@@ -112,6 +112,7 @@ def endpoint(kind="birth"):
         def wrapper(*args, **kwargs):
             try:
                 body = request.get_json(silent=True) or {}
+                jhora_config.init_pyjhora_defaults()
                 session_cfg = extract_session_config(body)
                 if session_cfg:
                     jhora_config.set_session_config(**session_cfg)
@@ -361,6 +362,7 @@ def jhora_avakhada_chakra(**p): return kundali_extras.get_avakhada_chakra(**p)
 def jhora_chart_image():
     try:
         body = request.get_json(silent=True) or {}
+        jhora_config.init_pyjhora_defaults()
         session_cfg = extract_session_config(body)
         if session_cfg:
             jhora_config.set_session_config(**session_cfg)

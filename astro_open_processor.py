@@ -54,6 +54,51 @@ SERVICE_VERSION = "1.0.0"
 SERVICE_NAME = "astro-wrapper"
 
 
+# Friendly aliases → JHora divisional-chart factor. Canonical names from
+# pyjhora_helper.DIVISIONAL_BUILDERS (e.g. "D9_Navamsa") are also accepted.
+CHART_TYPE_ALIASES = {
+    "d1": 1, "rasi": 1, "lagna": 1,
+    "d2": 2, "hora": 2,
+    "d3": 3, "drekkana": 3,
+    "d4": 4, "chaturthamsa": 4, "chaturthamsha": 4,
+    "d5": 5, "panchamsa": 5,
+    "d6": 6, "shashthamsa": 6,
+    "d7": 7, "saptamsa": 7, "saptamsha": 7, "saptamesha": 7,
+    "d8": 8, "ashtamsa": 8,
+    "d9": 9, "navamsa": 9, "navamsha": 9,
+    "d10": 10, "dasamsa": 10, "dashamsa": 10, "dashamansha": 10, "dashmansha": 10,
+    "d11": 11, "rudramsa": 11,
+    "d12": 12, "dwadasamsa": 12, "dwadashamsha": 12,
+    "d16": 16, "shodasamsa": 16, "shodashamsha": 16,
+    "d20": 20, "vimsamsa": 20, "vimshamsha": 20,
+    "d24": 24, "chaturvimsamsa": 24, "chaturvimshamsha": 24,
+    "d27": 27, "nakshatramsa": 27,
+    "d30": 30, "trimsamsa": 30, "trimshamsha": 30,
+    "d40": 40, "khavedamsa": 40,
+    "d45": 45, "akshavedamsa": 45,
+    "d60": 60, "shashtyamsa": 60,
+    "d81": 81, "nadiamsa": 81,
+    "d108": 108, "ashtotharamsa": 108,
+    "d144": 144, "dwadas_dwadas": 144,
+    "d150": 150,
+    "d300": 300,
+}
+
+
+def _resolve_divisional_factor(chart_type):
+    """Return divisional factor for a chart_type string, or None if unknown."""
+    if not chart_type:
+        return None
+    key = chart_type.strip().lower().replace("-", "_")
+    if key in CHART_TYPE_ALIASES:
+        return CHART_TYPE_ALIASES[key]
+    # Accept canonical names like "D9_Navamsa" — split on first underscore.
+    head = key.split("_", 1)[0]
+    if head in CHART_TYPE_ALIASES:
+        return CHART_TYPE_ALIASES[head]
+    return None
+
+
 def _truthy(v):
     return str(v).lower() in {"1", "true", "yes", "on"}
 
@@ -437,15 +482,24 @@ def jhora_chart_image():
         if chart_type in {"Moon", "moon"}:
             data = pyjhora_helper.get_moon_data(**params)["planets"]
             title = "Moon Chart"
-        elif chart_type == "D1_Rasi":
-            data = pyjhora_helper.get_rasi_chart(**params)
-            title = "Rasi Chart (D1)"
         else:
-            all_charts = pyjhora_helper.get_divisional_charts(**params)
-            if chart_type not in all_charts:
-                return _err(f"Unknown chart_type: {chart_type}. Available: {list(all_charts.keys())}")
-            data = all_charts[chart_type]
-            title = chart_type.replace("_", " ")
+            factor = _resolve_divisional_factor(chart_type)
+            if factor is None:
+                return _err(
+                    f"Unknown chart_type: {chart_type}. Accepted forms include "
+                    "D1_Rasi, D2_Hora, D4_Chaturthamsa, D7_Saptamsa, D9_Navamsa, "
+                    "D10_Dasamsa, ... or short aliases (D2, hora, D7, saptamesha, "
+                    "D10, dashmansha, etc.)"
+                )
+            if factor == 1:
+                data = pyjhora_helper.get_rasi_chart(**params)
+                title = "Rasi Chart (D1)"
+            else:
+                data = pyjhora_helper.get_divisional_chart(
+                    divisional_chart_factor=factor, **params,
+                )
+                canonical = pyjhora_helper.DIVISIONAL_BUILDERS[factor][0]
+                title = canonical.replace("_", " ")
 
         png_bytes = chart_image.generate_chart_image(
             data, chart_name=title, size=size, label_mode=label_mode, style=style, language=language,

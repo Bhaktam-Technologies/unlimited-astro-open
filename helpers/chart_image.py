@@ -28,16 +28,16 @@ SIGN_NAMES_FULL = [
 
 # (row, col) in 4x4 grid for each 0-based sign index
 SOUTH_INDIAN_POSITIONS = {
-    0: (0, 1),  # Aries
-    1: (0, 2),  # Taurus
-    2: (0, 3),  # Gemini
-    3: (1, 3),  # Cancer
-    4: (2, 3),  # Leo
-    5: (3, 3),  # Virgo
-    6: (3, 2),  # Libra
-    7: (3, 1),  # Scorpio
-    8: (3, 0),  # Sagittarius
-    9: (2, 0),  # Capricorn
+    0: (0, 1),   # Aries
+    1: (0, 2),   # Taurus
+    2: (0, 3),   # Gemini
+    3: (1, 3),   # Cancer
+    4: (2, 3),   # Leo
+    5: (3, 3),   # Virgo
+    6: (3, 2),   # Libra
+    7: (3, 1),   # Scorpio
+    8: (3, 0),   # Sagittarius
+    9: (2, 0),   # Capricorn
     10: (1, 0),  # Aquarius
     11: (0, 0),  # Pisces
 }
@@ -187,7 +187,7 @@ def generate_south_indian_chart(chart_data, title="Rasi Chart", size=600,
     draw = ImageDraw.Draw(img)
 
     _font = _try_load_devanagari_font if language == "hi" else _try_load_font
-    sign_font = _font(14)
+    sign_font   = _font(14)
     planet_font = _font(13)
 
     ox, oy = margin, margin
@@ -292,23 +292,23 @@ def generate_north_indian_chart(chart_data, title="Rasi Chart", size=600,
     img_h = size
 
     if theme == "dark":
-        COLOR_LINE = (255, 180, 0)  # Yellow lines
-        COLOR_SIGN = (255, 180, 0)  # Gold house numbers
+        COLOR_LINE   = (255, 180, 0)    # Yellow lines
+        COLOR_SIGN   = (255, 180, 0)    # Gold house numbers
         COLOR_PLANET = (255, 255, 255)  # White planets
         COLOR_DEGREE = (255, 255, 255)  # White degrees
     else:
-        COLOR_LINE = (255, 180, 0)  # Yellow lines
-        COLOR_SIGN = (255, 0, 0)  # Red sign numbers
-        COLOR_PLANET = (0, 0, 139)  # DarkBlue planets
-        COLOR_DEGREE = (0, 0, 0)  # Black degrees
+        COLOR_LINE   = (255, 180, 0)    # Yellow lines
+        COLOR_SIGN   = (255, 0, 0)      # Red sign numbers
+        COLOR_PLANET = (0, 0, 139)      # DarkBlue planets
+        COLOR_DEGREE = (0, 0, 0)        # Black degrees
 
     img = Image.new("RGBA", (img_w, img_h), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
 
     _font = _try_load_devanagari_font if language == "hi" else _try_load_font
-    num_font = _font(24)
-    BASE_PLANET_PT = 24  # max planet font size
-    BASE_DEG_PT = 15  # max degree font size
+    num_font        = _font(max(12, size // 36))  # sign-number label near inner vertex
+    BASE_PLANET_PT  = 24  # max planet font size
+    BASE_DEG_PT     = 15   # max degree font size
 
     ox = margin
     oy = margin
@@ -316,42 +316,38 @@ def generate_north_indian_chart(chart_data, title="Rasi Chart", size=600,
     def pt(rx, ry):
         return (ox + int(rx * S), oy + int(ry * S))
 
-    TL = pt(0, 0);
-    TR = pt(1, 0)
-    BR = pt(1, 1);
-    BL = pt(0, 1)
-    T = pt(.5, 0);
-    R = pt(1, .5)
-    B = pt(.5, 1);
-    L = pt(0, .5)
-    C = pt(.5, .5)
-    P1 = pt(.25, .25);
-    P2 = pt(.75, .25)
-    P3 = pt(.75, .75);
-    P4 = pt(.25, .75)
+    TL = pt(0,   0);   TR = pt(1,   0)
+    BR = pt(1,   1);   BL = pt(0,   1)
+    T  = pt(.5,  0);   R  = pt(1,  .5)
+    B  = pt(.5,  1);   L  = pt(0,  .5)
+    C  = pt(.5,  .5)
+    P1 = pt(.25, .25); P2 = pt(.75, .25)
+    P3 = pt(.75, .75); P4 = pt(.25, .75)
 
     # Standard North Indian houses: H1=Top, H4=Left, H7=Bottom, H10=Right
     # house_polys[h] connects vertices for House h
     house_polys = {
-        1: [C, P1, T, P2],  # Top
-        2: [TL, T, P1],
-        3: [TL, P1, L],
-        4: [C, P4, L, P1],  # Left
-        5: [BL, P4, L],
-        6: [BL, B, P4],
-        7: [C, P3, B, P4],  # Bottom
-        8: [BR, P3, B],
-        9: [BR, R, P3],
-        10: [C, P2, R, P3],  # Right
+        1:  [C, P1, T, P2],   # Top
+        2:  [TL, T, P1],
+        3:  [TL, P1, L],
+        4:  [C, P4, L, P1],   # Left
+        5:  [BL, P4, L],
+        6:  [BL, B, P4],
+        7:  [C, P3, B, P4],   # Bottom
+        8:  [BR, P3, B],
+        9:  [BR, R, P3],
+        10: [C, P2, R, P3],   # Right
         11: [TR, P2, R],
         12: [TR, T, P2],
     }
 
-    # Outer vertex for each house: used to push labels towards the outer wall
-    house_outer = {
-        1: T, 2: TL, 3: L, 4: L,
-        5: BL, 6: B, 7: B, 8: BR,
-        9: R, 10: R, 11: TR, 12: T,
+    # Inner vertex for each house: sign numbers are drawn near this point so
+    # they sit alongside the inner diamond's intersection lines (standard
+    # North Indian convention — see e.g. JHora / most Vedic software).
+    house_inner = {
+        1:  C,  2:  P1, 3:  P1, 4:  C,
+        5:  P4, 6:  P4, 7:  C,  8:  P3,
+        9:  P3, 10: C,  11: P2, 12: P2,
     }
 
     # Fixed sign layout: position 1=Aries (bottom-center), anti-clockwise to 12=Pisces.
@@ -371,8 +367,7 @@ def generate_north_indian_chart(chart_data, title="Rasi Chart", size=600,
         for entry in chart_data:
             p_name = entry.get("planet", "").lower()
             p_id = str(entry.get("planet_id", "")).lower()
-            if p_name == ref_name.lower() or p_id == ref_name[0].lower() or (
-                    ref_name == "Lagna" and (p_name == "as" or p_id == "l")):
+            if p_name == ref_name.lower() or p_id == ref_name[0].lower() or (ref_name == "Lagna" and (p_name == "as" or p_id == "l")):
                 start_sign = int(entry["sign_number"])
                 break
 
@@ -390,7 +385,7 @@ def generate_north_indian_chart(chart_data, title="Rasi Chart", size=600,
             house_planets[h].insert(0, (abbr, deg))
         else:
             abbr = _planet_abbr(p_name, language)
-            deg = float(entry.get("degrees", 0))
+            deg  = float(entry.get("degrees", 0))
             house_planets[h].append((abbr, deg))
 
     # Sign number to display in each cell corner (sign that occupies each house)
@@ -408,14 +403,17 @@ def generate_north_indian_chart(chart_data, title="Rasi Chart", size=600,
     # --- Render each house cell ---
     for h, pts in house_polys.items():
         cx_c, cy_c = _centroid(pts)
-        outer = house_outer[h]
+        inner = house_inner[h]
 
-        # Sign Number (Rashi): placed 38% of the way from centroid to the outer vertex
-        nx = cx_c + (outer[0] - cx_c) * 0.38
-        ny = cy_c + (outer[1] - cy_c) * 0.38
+        # Sign Number (Rashi): placed just inside the polygon from its inner
+        # vertex, offset toward the centroid so adjacent houses that share the
+        # same inner vertex (e.g. H2/H3 both meet at P1) end up on opposite
+        # sides of the diagonal.
+        nx = inner[0] + (cx_c - inner[0]) * 0.22
+        ny = inner[1] + (cy_c - inner[1]) * 0.22
         sign_str = str(house_sign_num[h])
         nbbox = draw.textbbox((0, 0), sign_str, font=num_font)
-        nw, nh = nbbox[2] - nbbox[0], nbbox[3] - nbbox[1]
+        nw, nh = nbbox[2]-nbbox[0], nbbox[3]-nbbox[1]
         draw.text((nx - nw / 2, ny - nh / 2), sign_str, fill=COLOR_SIGN, font=num_font)
 
         # Planets: use incenter for triangles (deepest interior point),
@@ -429,8 +427,8 @@ def generate_north_indian_chart(chart_data, title="Rasi Chart", size=600,
 
         # Auto-scale font so all planets fit within the inscribed circle
         inradius = _polygon_inradius(pts, sx, sy)
-        avail_h = inradius * 1.8  # usable vertical span (slightly less than diameter)
-        avail_w = inradius * 1.8  # usable horizontal span
+        avail_h = inradius * 1.8   # usable vertical span (slightly less than diameter)
+        avail_w = inradius * 1.8   # usable horizontal span
 
         use_two_cols = len(planets) >= 3
         col_count = 2 if use_two_cols else 1
@@ -547,8 +545,8 @@ def _bhava_south(cells, title="Bhava / Chalit Chart", size=600, label_mode="hous
     draw = ImageDraw.Draw(img)
 
     _font = _try_load_devanagari_font if language == "hi" else _try_load_font
-    sign_font = _font(14)
-    house_font = _font(17)
+    sign_font   = _font(14)
+    house_font  = _font(17)
     planet_font = _font(14)
 
     ox, oy = margin, margin
@@ -613,8 +611,8 @@ def _bhava_north(cells, houses_list, title="Bhava / Chalit Chart", size=600,
     draw = ImageDraw.Draw(img)
 
     _font = _try_load_devanagari_font if language == "hi" else _try_load_font
-    sign_font = _font(14)
-    house_font = _font(14)
+    sign_font   = _font(14)
+    house_font  = _font(14)
     planet_font = _font(14)
 
     ox = margin
@@ -623,19 +621,13 @@ def _bhava_north(cells, houses_list, title="Bhava / Chalit Chart", size=600,
     def pt(rx, ry):
         return (ox + int(rx * S), oy + int(ry * S))
 
-    TL = pt(0, 0);
-    TR = pt(1, 0)
-    BR = pt(1, 1);
-    BL = pt(0, 1)
-    T = pt(.5, 0);
-    R = pt(1, .5)
-    B = pt(.5, 1);
-    L = pt(0, .5)
-    C = pt(.5, .5)
-    P1 = pt(.25, .25);
-    P2 = pt(.75, .25)
-    P3 = pt(.75, .75);
-    P4 = pt(.25, .75)
+    TL = pt(0,   0);   TR = pt(1,   0)
+    BR = pt(1,   1);   BL = pt(0,   1)
+    T  = pt(.5,  0);   R  = pt(1,  .5)
+    B  = pt(.5,  1);   L  = pt(0,  .5)
+    C  = pt(.5,  .5)
+    P1 = pt(.25, .25); P2 = pt(.75, .25)
+    P3 = pt(.75, .75); P4 = pt(.25, .75)
 
     # Determine rotation offset: we want the house containing Lagna (or House 1) at the Top
     # In North Indian charts, the Top Diamond is traditionally House 1.
@@ -643,29 +635,29 @@ def _bhava_north(cells, houses_list, title="Bhava / Chalit Chart", size=600,
     # Usually, House 1 is the one we want at the Top.
     # If the API data is already house-ordered, we map h_num directly to Polygon h_num.
     # If the user says it's "opposite", it might be because they want House 1 at the Top
-    # but the API returned a fixed Aries-based chart.
+    # but the API returned a fixed Aries-based chart. 
     # However, we'll stick to H1=Top and ensure House 1 from data goes there.
-
+    
     # house_polys[h] maps house number (1-12) to polygon vertices
     # H1=Top, H4=Left, H7=Bottom, H10=Right
     house_polys = {
-        1: [C, P1, T, P2],  # Top
-        2: [TL, T, P1],
-        3: [TL, P1, L],
-        4: [C, P4, L, P1],  # Left
-        5: [BL, P4, L],
-        6: [BL, B, P4],
-        7: [C, P3, B, P4],  # Bottom
-        8: [BR, P3, B],
-        9: [BR, R, P3],
-        10: [C, P2, R, P3],  # Right
+        1:  [C, P1, T, P2],   # Top
+        2:  [TL, T, P1],
+        3:  [TL, P1, L],
+        4:  [C, P4, L, P1],   # Left
+        5:  [BL, P4, L],
+        6:  [BL, B, P4],
+        7:  [C, P3, B, P4],   # Bottom
+        8:  [BR, P3, B],
+        9:  [BR, R, P3],
+        10: [C, P2, R, P3],   # Right
         11: [TR, P2, R],
         12: [TR, T, P2],
     }
     house_outer = {
-        1: T, 2: TL, 3: L, 4: L,
-        5: BL, 6: B, 7: B, 8: BR,
-        9: R, 10: R, 11: TR, 12: T,
+        1: T,  2: TL, 3: L,  4: L,
+        5: BL, 6: B,  7: B,  8: BR,
+        9: R,  10: R, 11: TR, 12: T,
     }
 
     # Build per-house data directly from the input houses_list
@@ -673,10 +665,10 @@ def _bhava_north(cells, houses_list, title="Bhava / Chalit Chart", size=600,
     for h_entry in houses_list:
         h_num = int(h_entry.get("house", 0))
         if h_num < 1 or h_num > 12: continue
-
+        
         sign_name = h_entry.get("sign", "")
         sign_idx = SIGN_NAMES_FULL.index(sign_name) if sign_name in SIGN_NAMES_FULL else 0
-
+        
         planets_to_draw = []
         is_lagna_house = False
         for p in h_entry.get("planets", []):
@@ -694,20 +686,20 @@ def _bhava_north(cells, houses_list, title="Bhava / Chalit Chart", size=600,
             "is_lagna": is_lagna_house
         }
 
-    # Determine rotation: find which house has Lagna.
+    # Determine rotation: find which house has Lagna. 
     # If no house has "La", we assume House 1 is the top.
     lagna_h = 1
     for h_num, rd in region_data.items():
         if rd["is_lagna"]:
             lagna_h = h_num
             break
-
+    
     # rotation_offset: house h_num will be placed in polygon ((h_num - lagna_h) % 12) + 1
     # This ensures lagna_h goes to polygon 1 (Top).
-
+    
     # --- Draw chart lines ---
     draw.rectangle([ox, oy, ox + S, oy + S], outline=(255, 180, 0), width=2)
-    line_color = (255, 180, 0)  # Yellow lines
+    line_color = (255, 180, 0) # Yellow lines
     for pair in [(T, R), (R, B), (B, L), (L, T), (TL, BR), (TR, BL)]:
         draw.line([pair[0], pair[1]], fill=line_color, width=1)
 
@@ -716,12 +708,12 @@ def _bhava_north(cells, houses_list, title="Bhava / Chalit Chart", size=600,
     # where House lagna_h goes to Polygon 1.
     # So House h_num goes to Polygon p_num = (h_num - lagna_h) % 12 + 1
     # Conversely, Polygon p_num contains House h_num = (p_num - 1 + lagna_h - 1) % 12 + 1
-
+    
     for p_num, pts in house_polys.items():
         h_num = (p_num - 1 + lagna_h - 1) % 12 + 1
         rd = region_data.get(h_num)
         if not rd: continue
-
+        
         sign_short = SIGN_NAMES_SHORT[rd["sign_idx"]]
         cx_c, cy_c = _centroid(pts)
         outer = house_outer[p_num]
@@ -734,11 +726,11 @@ def _bhava_north(cells, houses_list, title="Bhava / Chalit Chart", size=600,
                 hlabel = str(rd["sign_idx"] + 1)
             else:
                 hlabel = f"H{rd['house_label']}"
-
+            
             nx = cx_c + (outer[0] - cx_c) * 0.42
             ny = cy_c + (outer[1] - cy_c) * 0.42
             bb = draw.textbbox((0, 0), hlabel, font=house_font)
-            draw.text((nx - (bb[2] - bb[0]) / 2, ny - (bb[3] - bb[1]) / 2), hlabel,
+            draw.text((nx - (bb[2]-bb[0])/2, ny - (bb[3]-bb[1])/2), hlabel, 
                       fill="red" if label_mode == "sign_number" else "darkgreen", font=house_font)
 
         # Build list of lines to draw in the center
@@ -759,12 +751,12 @@ def _bhava_north(cells, houses_list, title="Bhava / Chalit Chart", size=600,
 
         current_y = inner_y - total_h / 2
         color_map = {"sign": "darkred", "planet": "darkblue"}
-        font_map = {"sign": sign_font, "planet": planet_font}
+        font_map  = {"sign": sign_font,  "planet": planet_font}
 
         for kind, text in other_lines:
             f = font_map[kind]
             bb = draw.textbbox((0, 0), text, font=f)
-            draw.text((inner_x - (bb[2] - bb[0]) / 2, current_y), text, fill=color_map[kind], font=f)
+            draw.text((inner_x - (bb[2]-bb[0])/2, current_y), text, fill=color_map[kind], font=f)
             current_y += _lh
 
         if len(planet_lines) > 4:
@@ -776,12 +768,12 @@ def _bhava_north(cells, houses_list, title="Bhava / Chalit Chart", size=600,
                 tx = inner_x - 16 if col == 0 else inner_x + 16
                 ty = current_y + row * _lh
                 bb = draw.textbbox((0, 0), p_text, font=planet_font)
-                draw.text((tx - (bb[2] - bb[0]) / 2, ty), p_text, fill=color_map["planet"], font=planet_font)
+                draw.text((tx - (bb[2]-bb[0])/2, ty), p_text, fill=color_map["planet"], font=planet_font)
         else:
             for kind, text in planet_lines:
                 f = font_map[kind]
                 bb = draw.textbbox((0, 0), text, font=f)
-                draw.text((inner_x - (bb[2] - bb[0]) / 2, current_y), text, fill=color_map[kind], font=f)
+                draw.text((inner_x - (bb[2]-bb[0])/2, current_y), text, fill=color_map[kind], font=f)
                 current_y += _lh
 
     buf = io.BytesIO()

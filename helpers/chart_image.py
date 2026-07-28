@@ -306,7 +306,7 @@ def generate_north_indian_chart(chart_data, title="Rasi Chart", size=600,
     draw = ImageDraw.Draw(img)
 
     _font = _try_load_devanagari_font if language == "hi" else _try_load_font
-    num_font        = _font(24)
+    num_font        = _font(max(12, size // 36))  # sign-number label near inner vertex
     BASE_PLANET_PT  = 24  # max planet font size
     BASE_DEG_PT     = 15   # max degree font size
 
@@ -341,11 +341,13 @@ def generate_north_indian_chart(chart_data, title="Rasi Chart", size=600,
         12: [TR, T, P2],
     }
 
-    # Outer vertex for each house: used to push labels towards the outer wall
-    house_outer = {
-        1: T,  2: TL, 3: L,  4: L,
-        5: BL, 6: B,  7: B,  8: BR,
-        9: R,  10: R, 11: TR, 12: T,
+    # Inner vertex for each house: sign numbers are drawn near this point so
+    # they sit alongside the inner diamond's intersection lines (standard
+    # North Indian convention — see e.g. JHora / most Vedic software).
+    house_inner = {
+        1:  C,  2:  P1, 3:  P1, 4:  C,
+        5:  P4, 6:  P4, 7:  C,  8:  P3,
+        9:  P3, 10: C,  11: P2, 12: P2,
     }
 
     # Fixed sign layout: position 1=Aries (bottom-center), anti-clockwise to 12=Pisces.
@@ -401,11 +403,14 @@ def generate_north_indian_chart(chart_data, title="Rasi Chart", size=600,
     # --- Render each house cell ---
     for h, pts in house_polys.items():
         cx_c, cy_c = _centroid(pts)
-        outer = house_outer[h]
+        inner = house_inner[h]
 
-        # Sign Number (Rashi): placed 38% of the way from centroid to the outer vertex
-        nx = cx_c + (outer[0] - cx_c) * 0.38
-        ny = cy_c + (outer[1] - cy_c) * 0.38
+        # Sign Number (Rashi): placed just inside the polygon from its inner
+        # vertex, offset toward the centroid so adjacent houses that share the
+        # same inner vertex (e.g. H2/H3 both meet at P1) end up on opposite
+        # sides of the diagonal.
+        nx = inner[0] + (cx_c - inner[0]) * 0.22
+        ny = inner[1] + (cy_c - inner[1]) * 0.22
         sign_str = str(house_sign_num[h])
         nbbox = draw.textbbox((0, 0), sign_str, font=num_font)
         nw, nh = nbbox[2]-nbbox[0], nbbox[3]-nbbox[1]

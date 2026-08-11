@@ -479,6 +479,8 @@ def jhora_chart_image():
                 "degrees, sign_number, both, none"
             )
 
+        retrograde = None
+        combust = None
         if chart_type in {"Moon", "moon"}:
             data = pyjhora_helper.get_moon_data(**params)["planets"]
             title = "Moon Chart"
@@ -494,6 +496,12 @@ def jhora_chart_image():
             if factor == 1:
                 data = pyjhora_helper.get_rasi_chart(**params)
                 title = "Rasi Chart (D1)"
+                try:
+                    rc = advanced_helper.get_retrograde_combustion(**params)
+                    retrograde = rc.get("retrograde") or []
+                    combust = rc.get("combustion") or []
+                except Exception:
+                    logging.exception("retrograde/combust fetch failed")
             else:
                 data = pyjhora_helper.get_divisional_chart(
                     divisional_chart_factor=factor, **params,
@@ -503,6 +511,7 @@ def jhora_chart_image():
 
         png_bytes = chart_image.generate_chart_image(
             data, chart_name=title, size=size, label_mode=label_mode, style=style, language=language,
+            retrograde=retrograde, combust=combust,
         )
         return send_file(io.BytesIO(png_bytes),
                          mimetype="image/png",

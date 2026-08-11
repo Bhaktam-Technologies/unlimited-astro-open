@@ -158,17 +158,17 @@ def _measure_legend(retrograde, combust, font_size):
     lines = int(bool(retrograde)) + int(bool(combust))
     if lines == 0:
         return 0, 0
-    line_h = font_size + 6
-    return lines, 10 + lines * line_h + 4
+    line_h = font_size + 10
+    return lines, 12 + lines * line_h + 6
 
 
 def _draw_retro_combust_legend(draw, retrograde, combust, x, y, font, language="en",
                                color=(0, 0, 0)):
     """Draw '* Retrograde: ...' and '^ Combust: ...' lines starting at (x, y)."""
     try:
-        line_h = font.size + 6
+        line_h = font.size + 10
     except AttributeError:
-        line_h = 20
+        line_h = 28
     lang = "hi" if language == "hi" else "en"
     if retrograde:
         planets = ", ".join(_planet_abbr(p, language) for p in retrograde)
@@ -214,7 +214,7 @@ def generate_south_indian_chart(chart_data, title="Rasi Chart", size=600,
     cell_h = (size - 2 * margin) // 4
 
     _font = _try_load_devanagari_font if language == "hi" else _try_load_font
-    legend_font_size = max(11, size // 45)
+    legend_font_size = max(16, size // 30)
     _lines, legend_h = _measure_legend(retrograde, combust, legend_font_size)
     img_h = size + legend_h
 
@@ -348,7 +348,7 @@ def generate_north_indian_chart(chart_data, title="Rasi Chart", size=600,
         COLOR_LEGEND = (0, 0, 0)
 
     _font = _try_load_devanagari_font if language == "hi" else _try_load_font
-    legend_font_size = max(11, size // 45)
+    legend_font_size = max(16, size // 30)
     _lines, legend_h = _measure_legend(retrograde, combust, legend_font_size)
     img_h = size + legend_h
 

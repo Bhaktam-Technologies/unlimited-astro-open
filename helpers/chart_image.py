@@ -149,6 +149,36 @@ def _sign_short(sign_idx, language="en"):
         return str(sign_idx)
 
 
+RETRO_LABEL = {"en": "Retrograde", "hi": "वक्री"}
+COMBUST_LABEL = {"en": "Combust", "hi": "अस्त"}
+
+
+def _measure_legend(retrograde, combust, font_size):
+    """Return (line_count, legend_height_px) needed for the legend strip."""
+    lines = int(bool(retrograde)) + int(bool(combust))
+    if lines == 0:
+        return 0, 0
+    line_h = font_size + 10
+    return lines, 12 + lines * line_h + 6
+
+
+def _draw_retro_combust_legend(draw, retrograde, combust, x, y, font, language="en",
+                               color=(0, 0, 0)):
+    """Draw '* Retrograde: ...' and '^ Combust: ...' lines starting at (x, y)."""
+    try:
+        line_h = font.size + 10
+    except AttributeError:
+        line_h = 28
+    lang = "hi" if language == "hi" else "en"
+    if retrograde:
+        planets = ", ".join(_planet_abbr(p, language) for p in retrograde)
+        draw.text((x, y), f"* {RETRO_LABEL[lang]}: {planets}", fill=color, font=font)
+        y += line_h
+    if combust:
+        planets = ", ".join(_planet_abbr(p, language) for p in combust)
+        draw.text((x, y), f"^ {COMBUST_LABEL[lang]}: {planets}", fill=color, font=font)
+
+
 def _group_planets_by_sign(chart_data, label_mode="degrees", language="en"):
     """Group planet labels by 0-based sign index."""
     houses = {}
@@ -175,20 +205,25 @@ def _group_planets_by_sign(chart_data, label_mode="degrees", language="en"):
 # ---------------------------------------------------------------------------
 
 def generate_south_indian_chart(chart_data, title="Rasi Chart", size=600,
-                                label_mode="degrees", language="en"):
+                                label_mode="degrees", language="en",
+                                retrograde=None, combust=None):
     """South Indian style: signs are fixed in cells, planets/lagna move."""
     margin = 0
     img_w = size
-    img_h = size
     cell_w = (size - 2 * margin) // 4
     cell_h = (size - 2 * margin) // 4
+
+    _font = _try_load_devanagari_font if language == "hi" else _try_load_font
+    legend_font_size = max(16, size // 30)
+    _lines, legend_h = _measure_legend(retrograde, combust, legend_font_size)
+    img_h = size + legend_h
 
     img = Image.new("RGBA", (img_w, img_h), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
 
-    _font = _try_load_devanagari_font if language == "hi" else _try_load_font
     sign_font   = _font(14)
     planet_font = _font(13)
+    legend_font = _font(legend_font_size) if legend_h else None
 
     ox, oy = margin, margin
     for r in range(5):
@@ -217,6 +252,13 @@ def generate_south_indian_chart(chart_data, title="Rasi Chart", size=600,
         for p_label in planets:
             draw.text((x + 3, py), p_label, fill="darkblue", font=planet_font)
             py += 20
+
+    if legend_h:
+        _draw_retro_combust_legend(
+            draw, retrograde, combust,
+            x=ox + 6, y=oy + 4 * cell_h + 8,
+            font=legend_font, language=language,
+        )
 
     buf = io.BytesIO()
     img.save(buf, format="PNG")
@@ -279,34 +321,42 @@ def _safe_center(pts):
 
 def generate_north_indian_chart(chart_data, title="Rasi Chart", size=600,
                                 label_mode="degrees", theme="light", start_sign=None,
-                                language="en"):
+                                language="en", retrograde=None, combust=None):
     """North Indian style chart.
 
     theme: "light" (white bg) or "dark" (black bg, yellow lines, white text).
     start_sign: 1-based sign number to force into House 1 (overrides auto-detect).
     language: "en" or "hi" — switches planet/sign abbreviations to Hindi.
+    retrograde / combust: optional lists of planet names to show in a legend
+        strip below the chart (marked with `*` and `^` respectively).
     """
     margin = 0
     S = size - 2 * margin
     img_w = size
-    img_h = size
 
     if theme == "dark":
         COLOR_LINE   = (255, 180, 0)    # Yellow lines
         COLOR_SIGN   = (255, 180, 0)    # Gold house numbers
         COLOR_PLANET = (255, 255, 255)  # White planets
         COLOR_DEGREE = (255, 255, 255)  # White degrees
+        COLOR_LEGEND = (255, 255, 255)
     else:
         COLOR_LINE   = (255, 180, 0)    # Yellow lines
         COLOR_SIGN   = (255, 0, 0)      # Red sign numbers
         COLOR_PLANET = (0, 0, 139)      # DarkBlue planets
         COLOR_DEGREE = (0, 0, 0)        # Black degrees
+        COLOR_LEGEND = (0, 0, 0)
+
+    _font = _try_load_devanagari_font if language == "hi" else _try_load_font
+    legend_font_size = max(16, size // 30)
+    _lines, legend_h = _measure_legend(retrograde, combust, legend_font_size)
+    img_h = size + legend_h
 
     img = Image.new("RGBA", (img_w, img_h), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
 
-    _font = _try_load_devanagari_font if language == "hi" else _try_load_font
     num_font        = _font(max(12, size // 36))  # sign-number label near inner vertex
+    legend_font     = _font(legend_font_size) if legend_h else None
     BASE_PLANET_PT  = 24  # max planet font size
     BASE_DEG_PT     = 15   # max degree font size
 
@@ -484,6 +534,13 @@ def generate_north_indian_chart(chart_data, title="Rasi Chart", size=600,
             for abbr, deg in planets:
                 _draw_planet_row(sx, ty, abbr, deg)
                 ty += max_ph + spacing
+
+    if legend_h:
+        _draw_retro_combust_legend(
+            draw, retrograde, combust,
+            x=ox + 6, y=oy + S + 8,
+            font=legend_font, language=language, color=COLOR_LEGEND,
+        )
 
     buf = io.BytesIO()
     img.save(buf, format="PNG")
@@ -787,7 +844,8 @@ def _bhava_north(cells, houses_list, title="Bhava / Chalit Chart", size=600,
 # ---------------------------------------------------------------------------
 
 def generate_chart_image(chart_data, chart_name="Rasi Chart", size=600,
-                         label_mode="degrees", style="north", language="en"):
+                         label_mode="degrees", style="north", language="en",
+                         retrograde=None, combust=None):
     """Generate chart image bytes.
 
     Args:
@@ -797,6 +855,10 @@ def generate_chart_image(chart_data, chart_name="Rasi Chart", size=600,
         label_mode: "degrees" | "sign_number" | "both" | "none"
         style: "north" (default) | "south"
         language: "en" (default) | "hi"
+        retrograde: optional list of retrograde planet names — shown as
+            "* Retrograde: ..." legend below the chart.
+        combust: optional list of combust planet names — shown as
+            "^ Combust: ..." legend below the chart.
 
     Returns:
         PNG image as bytes
@@ -804,9 +866,11 @@ def generate_chart_image(chart_data, chart_name="Rasi Chart", size=600,
     if style == "south":
         return generate_south_indian_chart(
             chart_data, title=chart_name, size=size, label_mode=label_mode, language=language,
+            retrograde=retrograde, combust=combust,
         )
     return generate_north_indian_chart(
         chart_data, title=chart_name, size=size, label_mode=label_mode, language=language,
+        retrograde=retrograde, combust=combust,
     )
 
 
